@@ -62,14 +62,14 @@ class MakeUpSolutionScraper:
                 # 成否確認
                 if await self.page.locator('a:has-text("ログアウト"), a:has-text("マイページ")').count() > 0:
                     logger.info("Login successful.")
-                    return True
+                    return "success"
             
             logger.warning("Could not complete login flow. Proceeding as GUEST.")
-            return True # 続行を許可
+            return "guest"
         except Exception as e:
             logger.error(f"Login process error: {e}")
             logger.info("Proceeding as GUEST despite login error.")
-            return True # エラーでもリサーチ自体は止めない
+            return "error"
 
 
     async def scrape_products(self, base_url="https://www.make-up-solution.com/ec/Facet?keyword=メイク", 
