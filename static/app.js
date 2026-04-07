@@ -111,6 +111,19 @@ function updateCategories() {
             <option value="score">人気順</option>
         `;
         customUrlInput.placeholder = 'https://www.yodobashi.com/category/...';
+    } else if (targetSite === 'netsea') {
+        catSelect.innerHTML = `
+            <option value="beauty">美容・コスメ</option>
+            <option value="health">健康・サプリ</option>
+            <option value="food">食品・飲料</option>
+            <option value="daily">日用品</option>
+        `;
+        sortSelect.innerHTML = `
+            <option value="new_arrival">新着順</option>
+            <option value="price_asc">価格が安い順</option>
+            <option value="price_desc">価格が高い順</option>
+        `;
+        customUrlInput.placeholder = 'https://www.netsea.jp/search/...';
     } else {
         catSelect.innerHTML = `
             <option value="makeup">メイク（通常）</option>

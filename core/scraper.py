@@ -15,7 +15,7 @@ MS_EMAIL = os.environ.get("MS_EMAIL")
 MS_PASSWORD = os.environ.get("MS_PASSWORD")
 
 class MakeUpSolutionScraper:
-    def __init__(self, headless=True):
+    def __init__(self, headless=False):
         self.headless = headless
         self.playwright = None
         self.browser = None

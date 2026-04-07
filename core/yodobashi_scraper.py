@@ -25,7 +25,7 @@ YODOBASHI_CATEGORIES = {
 
 
 class YodobashiScraper:
-    def __init__(self, headless=True):
+    def __init__(self, headless=False):
         self.headless = headless
         self.playwright = None
         self.browser = None

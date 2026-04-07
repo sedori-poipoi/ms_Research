@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 
 from core.scraper import MakeUpSolutionScraper
 from core.yodobashi_scraper import YodobashiScraper, YODOBASHI_CATEGORIES
+from core.netsea_scraper import NetseaScraper, NETSEA_CATEGORIES
 from core.amazon_api import AmazonSPAPI
 from core.config_manager import ConfigManager
 from core.history_manager import HistoryManager
@@ -120,10 +121,14 @@ async def run_research_task(params: ResearchParams):
                 params.target_site = "yodobashi"
             elif "make-up-solution" in target_url:
                 params.target_site = "makeup"
+            elif "netsea.jp" in target_url:
+                params.target_site = "netsea"
         
         if not target_url:
             if params.target_site == "yodobashi":
                 target_url = YODOBASHI_CATEGORIES.get(params.category, ["パソコン", "https://www.yodobashi.com/category/19531/"])[1]
+            elif params.target_site == "netsea":
+                target_url = NETSEA_CATEGORIES.get(params.category, ["美容・コスメ", "https://www.netsea.jp/search/?category_id=302"])[1]
             else:
                 target_url = MS_CATEGORIES.get(params.category, MS_CATEGORIES["makeup"])
 
@@ -132,9 +137,13 @@ async def run_research_task(params: ResearchParams):
             from core.yodobashi_scraper import YodobashiScraper
             scraper = YodobashiScraper(headless=False)
             log_it("🚀 ヨドバシ.com リサーチ開始")
+        elif params.target_site == "netsea":
+            from core.netsea_scraper import NetseaScraper
+            scraper = NetseaScraper(headless=False)
+            log_it("🚀 NETSEA リサーチ開始")
         else:
             from core.scraper import MakeUpSolutionScraper
-            scraper = MakeUpSolutionScraper(headless=True)
+            scraper = MakeUpSolutionScraper(headless=False)
             log_it("🚀 MakeUp Solution リサーチ開始")
 
         await scraper.start()
