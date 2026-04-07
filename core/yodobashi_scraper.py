@@ -12,6 +12,8 @@ logger = logging.getLogger(__name__)
 
 # Yodobashi category URL map (top-level categories researched from site)
 YODOBASHI_CATEGORIES = {
+    "outlet":       ("アウトレット",       "https://www.yodobashi.com/ec/category/index.html?word=%E3%82%A2%E3%82%A6%E3%83%88%E3%83%AC%E3%83%83%E3%83%88"),
+    "home":         ("家電・日用品",       "https://www.yodobashi.com/category/170063/"),
     "appliances":   ("生活家電",           "https://www.yodobashi.com/category/6353/"),
     "pc":           ("パソコン・周辺機器", "https://www.yodobashi.com/category/19531/"),
     "camera":       ("カメラ・写真",       "https://www.yodobashi.com/category/19055/"),

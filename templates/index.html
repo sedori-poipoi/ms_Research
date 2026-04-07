@@ -138,11 +138,11 @@
                             <div class="header-filters">
                                 <input type="text" id="tableSearch" placeholder="🔍 キーワード絞り込み..." onkeyup="filterResults()">
                                 <select id="profitFilter" onchange="filterResults()">
-                                    <option value="0" selected>利益額: 0円以上 (利益品のみ)</option>
+                                    <option value="-999999" selected>全て表示 (マイナス・不一致も含む)</option>
+                                    <option value="0">利益額: 0円以上 (利益品のみ)</option>
                                     <option value="500">500円以上</option>
                                     <option value="1000">1000円以上</option>
                                     <option value="2000">2000円以上</option>
-                                    <option value="-999999">全て表示 (マイナスも含む)</option>
                                 </select>
 
                             </div>

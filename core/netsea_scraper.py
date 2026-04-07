@@ -14,9 +14,13 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 NETSEA_CATEGORIES = {
-    "beauty":    ("美容・コスメ",     "https://www.netsea.jp/search/?category_id=302"),
-    "health":    ("健康・サプリ",     "https://www.netsea.jp/search/?category_id=81601"),
-    "food":      ("食品・飲料",       "https://www.netsea.jp/search/?category_id=8"),
+    "sale":      ("ゲリラセール",     "https://www.netsea.jp/special/guerrilla"),
+    "makeup":    ("メイク・コスメ",   "https://www.netsea.jp/search/?category_id=302"),
+    "skincare":  ("スキンケア",       "https://www.netsea.jp/search/?category_id=313"),
+    "haircare":  ("ヘアケア",         "https://www.netsea.jp/search/?category_id=315"),
+    "health":    ("衛生日用品",       "https://www.netsea.jp/search/?category_id=305"),
+    "food":      ("食品",             "https://www.netsea.jp/search/?category_id=8"),
+    "drink":     ("飲料",             "https://www.netsea.jp/search/?category_id=804"),
     "daily":     ("日用品",           "https://www.netsea.jp/search/?category_id=2"),
 }
 
@@ -133,10 +137,7 @@ class NetseaScraper:
             await self._safe_wait(1, 2)
 
             # NETSEAのリストアイテム取得
-            item_els = await self.page.locator('.item, .listItem, .itemLine, li.module-item').all()
-            
-            if not item_els:
-                item_els = await self.page.locator('.product-box, .box').all()
+            item_els = await self.page.locator('.showcaseType01, .item, .listItem, .itemLine, li.module-item, .product-box, .box').all()
             
             if not item_els:
                 yield {"type": "log", "msg": "⚠️ 商品情報が見つかりません。"}
@@ -157,12 +158,16 @@ class NetseaScraper:
                 
                 # URLとJANコード抽出 (商品詳細URLの末尾がJANのケースが多い)
                 url = target_url
-                url_match = re.search(r"href=\"([^\"]+/\d{13})\"", html)
+                jan = ""
+                # "shop/店舗ID/商品ID(またはJAN)"の形式を捕捉
+                url_match = re.search(r"href=\"([^\"]+/shop/\d+/[^\"]+)\"", html)
                 if url_match:
                     url_path = url_match.group(1)
                     url = f"https://www.netsea.jp{url_path}" if url_path.startswith("/") else url_path
-                    # URLの末尾13桁をJANとする
-                    jan = url_path.split("/")[-1]
+                    # URLの末尾13桁を調べる
+                    potential_jan = url_path.split("/")[-1]
+                    if re.match(r"4[59]\d{11}$", potential_jan):
+                        jan = potential_jan
                 
                 # HTML内から(First Leaf拡張機能などによる)明確なテキストを拾う
                 if not jan:
@@ -175,29 +180,34 @@ class NetseaScraper:
 
                 # 価格抽出
                 price = 0
-                price_match = re.search(r"([0-9,]+)\s*(円|/点)", txt)
+                price_match = re.search(r"class=\"afterPrice\"[^>]*>\s*([0-9,]+)", html)
+                if not price_match:
+                    price_match = re.search(r"class=\"price[^>]*>\s*([0-9,]+)", html)
+                
                 if price_match:
                     price = int(price_match.group(1).replace(",", ""))
                 else:
-                    # try alternative
-                    m = re.search(r"¥([0-9,]+)", txt)
+                    m = re.search(r"([0-9,]+)\s*(円|/点|\(税抜\))", txt)
                     if m:
                         price = int(m.group(1).replace(",", ""))
                 
                 # Title抽出
                 title = "商品"
-                # .name a のテキストを取るのが確実
-                title_match = re.search(r"class=\"name\".*?>(.*?)<", html, re.IGNORECASE)
+                title_match = re.search(r"class=\"showcaseHd\"[^>]*>.*?<a[^>]*>(.*?)</a>", html, re.IGNORECASE | re.DOTALL)
                 if title_match:
                     title = re.sub(r'<[^>]+>', '', title_match.group(1)).strip()
                 else:
-                    title_attr = re.search(r"title=\"(.*?)\"", html)
-                    if title_attr:
-                        title = title_attr.group(1)
+                    title_match2 = re.search(r"class=\"name\".*?>(.*?)<", html, re.IGNORECASE)
+                    if title_match2:
+                        title = re.sub(r'<[^>]+>', '', title_match2.group(1)).strip()
                     else:
-                        lines = [ln.strip() for ln in txt.split("\n") if ln.strip()]
-                        if lines:
-                            title = lines[0][:40]
+                        title_attr = re.search(r"title=\"(.*?)\"", html)
+                        if title_attr:
+                            title = title_attr.group(1)
+                        else:
+                            lines = [ln.strip() for ln in txt.split("\n") if ln.strip()]
+                            if lines:
+                                title = lines[0][:40]
 
                 if price > 0:
                     count += 1

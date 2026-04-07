@@ -97,6 +97,8 @@ function updateCategories() {
             <option value="pet">🐾 ペット用品・フード</option>
             <option value="appliances">🏠 生活家電</option>
             <option value="pc">💻 パソコン・周辺機器</option>
+            <option value="outlet">🔥 アウトレット・在庫処分品</option>
+            <option value="home">🏡 家電・日用品全般</option>
             <option value="camera">📷 カメラ・写真</option>
             <option value="audio">🎧 オーディオ</option>
             <option value="kitchen">🍳 キッチン用品・食器</option>
@@ -113,10 +115,14 @@ function updateCategories() {
         customUrlInput.placeholder = 'https://www.yodobashi.com/category/...';
     } else if (targetSite === 'netsea') {
         catSelect.innerHTML = `
-            <option value="beauty">美容・コスメ</option>
-            <option value="health">健康・サプリ</option>
-            <option value="food">食品・飲料</option>
-            <option value="daily">日用品</option>
+            <option value="sale">🔥 ゲリラセール・クーポン対象</option>
+            <option value="makeup">💄 メイク・コスメ全般</option>
+            <option value="skincare">💧 スキンケア・基礎化粧品</option>
+            <option value="haircare">🛁 ヘアケア</option>
+            <option value="health">💊 衛生日用品・健康関連</option>
+            <option value="food">🍙 食品・お菓子</option>
+            <option value="drink">🍹 飲料・レトルト</option>
+            <option value="daily">🏡 キッチン・バス・生活雑貨</option>
         `;
         sortSelect.innerHTML = `
             <option value="new_arrival">新着順</option>
@@ -126,10 +132,13 @@ function updateCategories() {
         customUrlInput.placeholder = 'https://www.netsea.jp/search/...';
     } else {
         catSelect.innerHTML = `
-            <option value="makeup">メイク（通常）</option>
-            <option value="skincare">スキンケア（通常）</option>
-            <option value="sale">セール品のみ抽出 🔥</option>
-            <option value="all">全カテゴリ（全頭）</option>
+            <option value="sale">🔥 お得な限定・セール品</option>
+            <option value="makeup">💄 メイク全般（口紅・マスカラ等）</option>
+            <option value="skincare">💧 スキンケア・基礎化粧品</option>
+            <option value="mask">🧽 フェイスマスク・パック</option>
+            <option value="haircare">🛁 ヘアケア全般</option>
+            <option value="bodycare">🧴 ボディケア・ハンドケア</option>
+            <option value="fragrance">🌹 フレグランス</option>
         `;
         sortSelect.innerHTML = `
             <option value="disp_from_datetime">新着順</option>

@@ -85,10 +85,13 @@ def calculate_roi_and_judgment(buy_box, purchase_price, fba_fee, points_rate=0):
 
 # ---------- Category URL maps ----------
 MS_CATEGORIES = {
-    "makeup":   "https://www.make-up-solution.com/ec/Facet?keyword=メイク",
-    "skincare": "https://www.make-up-solution.com/ec/Facet?keyword=スキンケア",
-    "sale":     "https://www.make-up-solution.com/ec/Facet?category_1=11030000000",
-    "all":      "https://www.make-up-solution.com/ec/Facet?keyword=",
+    "sale":      "https://www.make-up-solution.com/ec/Facet?inputKeywordFacet=MS%E9%99%90%E5%AE%9A&kclsf=AND",
+    "makeup":    "https://www.make-up-solution.com/ec/Facet?category_0=11050000000",
+    "skincare":  "https://www.make-up-solution.com/ec/Facet?category_0=11020000000",
+    "mask":      "https://www.make-up-solution.com/ec/Facet?category_0=11020600000",
+    "haircare":  "https://www.make-up-solution.com/ec/Facet?category_0=11030000000",
+    "bodycare":  "https://www.make-up-solution.com/ec/Facet?category_0=11040000000",
+    "fragrance": "https://www.make-up-solution.com/ec/Facet?category_0=11060000000",
 }
 
 
@@ -182,6 +185,7 @@ async def run_research_task(params: ResearchParams):
             jan = item.get("jan")
             asin = None
             amz_brand = None
+            sales_rank = None
             
             session_data["progress"] = int((idx / params.max_items) * 100)
 
@@ -199,52 +203,58 @@ async def run_research_task(params: ResearchParams):
                     log_it(f"✅ AI照合成功: ASIN {asin} ({sales_rank})", is_focus_skip=True)
                 else:
                     log_it(f"⚪️ Amazon不一致: {item['title'][:15]}...", is_focus_skip=True)
-                    continue
 
-            # --- Price & Fees (Async) ---
-            pricing = await amazon.get_competitive_pricing(asin)
-            buy_box = pricing["price"]
-            seller_count = pricing["seller_count"]
+            buy_box = 0
+            seller_count = 0
+            fba_fee = 0
+            restriction = "確認中"
             
-            if buy_box <= 0:
-                log_it(f"⚪️ 売価不明: {asin}", is_focus_skip=True)
-                continue
+            if asin and asin != "—":
+                pricing = await amazon.get_competitive_pricing(asin)
+                buy_box = pricing["price"]
+                seller_count = pricing["seller_count"]
+                
+                if buy_box <= 0:
+                    log_it(f"⚪️ 売価不明: {asin}", is_focus_skip=True)
+                else:
+                    fba_fee = await amazon.get_fees_estimate(asin, buy_box)
+                
+                restriction = await amazon.get_listing_restrictions(asin)
 
-            fba_fee = await amazon.get_fees_estimate(asin, buy_box)
             pts_rate = item.get("points_rate", 0)
             profit, margin, roi, judgment = calculate_roi_and_judgment(
                 buy_box, item["price"], fba_fee, points_rate=pts_rate
             )
+            if not asin or asin == "—":
+                judgment = "⚪️ Amazon不一致"
+
+            res_entry = {
+                "id": f"{asin}_{idx}",
+                "jan": jan or "—",
+                "asin": asin or "—",
+                "title": item["title"],
+                "brand": item["brand"],
+                "price": item["price"],
+                "amazon_price": buy_box,
+                "rank": sales_rank or "—",
+                "sellers": seller_count,
+                "profit": int(profit),
+                "margin": f"{int(margin*100)}%",
+                "roi": f"{int(roi*100)}%",
+                "restriction": restriction,
+                "judgment": judgment,
+                "amazon_url": f"https://www.amazon.co.jp/dp/{asin}" if asin and asin != "—" else "#",
+                "keepa_url": f"https://keepa.com/#!product/5-{asin}" if asin and asin != "—" else "#",
+                "ms_url": item["ms_url"],
+            }
+            session_data["results"].append(res_entry)
             
-            restriction = await amazon.get_listing_restrictions(asin)
+            try:
+                db.save_result(res_entry)
+            except:
+                pass
 
             if profit > 0:
-                res_entry = {
-                    "id": f"{asin}_{idx}",
-                    "jan": jan or "—",
-                    "asin": asin,
-                    "title": item["title"],
-                    "brand": item["brand"],
-                    "price": item["price"],
-                    "amazon_price": buy_box,
-                    "rank": sales_rank,
-                    "sellers": seller_count,
-                    "profit": int(profit),
-                    "margin": f"{int(margin*100)}%",
-                    "roi": f"{int(roi*100)}%",
-                    "restriction": restriction,
-                    "judgment": judgment,
-                    "amazon_url": f"https://www.amazon.co.jp/dp/{asin}",
-                    "keepa_url": f"https://keepa.com/#!product/5-{asin}",
-                    "ms_url": item["ms_url"],
-                }
-                session_data["results"].append(res_entry)
-                
-                try:
-                    db.save_result(res_entry)
-                except:
-                    pass
-
                 if "制限" not in restriction:
                     log_it(f"✨ 利益発見！ +{int(profit)}円 ({item['title'][:12]}...)")
                 else:
