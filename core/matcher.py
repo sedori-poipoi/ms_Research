@@ -72,13 +72,30 @@ class ProductMatcher:
         
         # 2. Key Keyword Check
         # Important words that change the meaning of the product
-        key_keywords = ["キューブ", "粉末", "液体", "詰替", "本体", "セット", "ケース", "訳あり"]
+        key_keywords = [
+            "キューブ", "粉末", "液体", "詰替", "本体", "セット", "ケース", "訳あり",
+            "トリートメント", "cc", "ジェル", "リキッド", "パウダー", "クリーム", "バーム", 
+            "ペンシル", "uv", "シルク", "ウォータープルーフ", "マット", "パール"
+        ]
+        s_title_lower = source_title.lower()
+        t_title_lower = target_title.lower()
+        
         for kw in key_keywords:
-            raw_kw = kw
-            if kw in source_title and kw not in target_title:
-                score -= 30
-            if kw not in source_title and kw in target_title:
-                score -= 30
+            if kw in s_title_lower and kw not in t_title_lower:
+                score -= 40  # Heavy penalty for missing key variation
+            if kw not in s_title_lower and kw in t_title_lower:
+                score -= 40
+                
+        # 3. Numeric/Color Code check (like 01, 02)
+        # Find 2-digit numbers usually representing color codes in cosmetics
+        import re
+        s_codes = set(re.findall(r'\b\d{2,3}\b', source_title))
+        t_codes = set(re.findall(r'\b\d{2,3}\b', target_title))
+        if s_codes and t_codes:
+            # If both have codes, and they don't intersect, it's likely a different color
+            if not s_codes.intersection(t_codes):
+                score -= 60
+                logger.info(f"Color/Variant code mismatch: {s_codes} vs {t_codes}")
 
         # 3. Simple fuzzy title check (remaining parts)
         # (This is a placeholder for more complex Jaccard or Levenshtein if needed)

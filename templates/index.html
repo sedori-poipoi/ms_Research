@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>First Leaf Sedori AI Dashboard</title>
-    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="/static/styles.css?v=20260415-v3">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -21,184 +21,226 @@
 
         <!-- Research Tab -->
         <div id="researchTab" class="tab-content active">
-            <div class="dashboard-grid">
-                <div class="sidebar">
-                    <div class="card">
-                        <div class="card-title">🌱 リサーチ実行 (Pro)</div>
-                        
-                        <div class="switch-group">
-                            <div style="font-weight: 600; font-size: 0.95rem; color: var(--primary-green);">
-                                即戦力モード <span style="font-size: 0.7rem; font-weight: normal; display: block; color: #666;">解除済みブランドのみ表示</span>
-                            </div>
-                            <label class="switch">
-                                <input type="checkbox" id="focusMode">
-                                <span class="slider"></span>
-                            </label>
-                        </div>
+            
+            <!-- ===== CONTROL PANEL (Ribbon) ===== -->
+            <div class="card control-panel" id="controlPanel">
+                <div class="panel-header">
+                    <div class="card-title" style="margin-bottom: 0; font-size: 1rem;">🌱 リサーチ実行</div>
+                    <button id="togglePanelBtn" class="btn-toggle" onclick="toggleControlPanel()">▲ 設定を隠す</button>
+                </div>
 
-                        <div class="switch-group" style="background: #e3f2fd;">
-                            <div style="font-weight: 600; font-size: 0.95rem; color: #1565c0;">
-                                履歴スキップ機能 <span style="font-size: 0.7rem; font-weight: normal; display: block; color: #666;">24h以内に調べた商品を飛ばす</span>
+                <div class="panel-body" id="controlPanelBody">
+                    <!-- Row 1: Genre Selection (Full Width) -->
+                    <div class="control-row genre-row">
+                        <div class="form-group" style="flex: 1;">
+                            <label>ジャンル (複数選択可)</label>
+                            <div class="chip-container" id="categoryContainer">
+                                <!-- Chips dynamically generated -->
                             </div>
-                            <label class="switch">
-                                <input type="checkbox" id="skipHistory" checked>
-                                <span class="slider" style="background-color: #bbdefb;"></span>
-                            </label>
                         </div>
+                    </div>
 
-                        <div class="form-group">
-                            <label style="color: var(--primary-green); font-weight: 700;">🎯 リサーチ対象サイト</label>
-                            <select id="targetSite" onchange="updateCategories()" style="border-color: var(--primary-green);">
+                    <!-- Row 2: Site + URL + Sort + Pages + Count + Toggles + Buttons -->
+                    <div class="control-row settings-row">
+                        <div class="form-group" style="min-width: 200px;">
+                            <label class="label-accent">巡回サイト</label>
+                            <select id="targetSite" onchange="updateCategories()">
                                 <option value="makeup">メイクアップソリューション</option>
-                                <option value="yodobashi">ヨドバシカメラ (ポイント10%考慮)</option>
-                                <option value="netsea">NETSEA (卸サイト)</option>
+                                <option value="yodobashi">ヨドバシ.com</option>
+                                <option value="netsea">NETSEA (ネッシー)</option>
                             </select>
                         </div>
-
-                        <div class="form-group">
-                            <label>カテゴリ/検索 (URL未入力時)</label>
-                            <select id="category">
-                                <!-- JS details populated here -->
-                                <option value="makeup">メイク（通常）</option>
-                                <option value="skincare">スキンケア（通常）</option>
-                                <option value="sale">セール品のみ抽出 🔥</option>
-                                <option value="all">全カテゴリ（全頭）</option>
-                            </select>
+                        <div class="form-group" style="flex: 1; min-width: 200px;">
+                            <label>カスタムURL (任意)</label>
+                            <input type="text" id="customUrl" placeholder="https://...">
                         </div>
-
-                        <div class="form-group" style="background: #fff9c4; padding: 1rem; border-radius: 12px; border: 1px solid #fff176;">
-                            <label style="color: #f57f17; font-weight: 700;">🎯 カスタムURL (任意)</label>
-                            <input type="text" id="customUrl" placeholder="https://www.make-up-solution.com/..." style="border-color: #ffe082;">
-                            <span style="font-size: 0.75rem; color: #795548; display: block; margin-top: 0.4rem;">※ 貼り付けるとそのページを優先して調べます</span>
-                        </div>
-
-
-                        <div class="form-row" style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem;">
-                            <div class="form-group" style="flex: 1; margin-bottom: 0;">
-                                <label>開始ページ</label>
-                                <input type="number" id="startPage" value="1" min="1">
-                            </div>
-                            <div class="form-group" style="flex: 1; margin-bottom: 0;">
-                                <label>終了ページ</label>
-                                <input type="number" id="endPage" value="1" min="1">
-                            </div>
-                        </div>
-
-                        <div class="form-group">
+                        <div class="form-group" style="width: 120px;">
                             <label>並び順</label>
                             <select id="sortOrder">
                                 <option value="disp_from_datetime">新着順</option>
-                                <option value="selling_price0_min">価格が安い順</option>
-                                <option value="selling_price0_max">価格が高い順</option>
-                                <option value="review">クチコミが多い順</option>
+                                <option value="selling_price0_min">安い順</option>
+                                <option value="selling_price0_max">高い順</option>
                             </select>
                         </div>
-
-                        <div class="form-group">
-                            <label>最大巡回件数 (合計)</label>
+                        <div class="form-group" style="width: 70px;">
+                            <label>開始PG</label>
+                            <input type="number" id="startPage" value="1" min="1">
+                        </div>
+                        <div class="form-group" style="width: 70px;">
+                            <label>終了PG</label>
+                            <input type="number" id="endPage" value="1" min="1">
+                        </div>
+                        <div class="form-group" style="width: 70px;">
+                            <label>巡回件数</label>
                             <input type="number" id="maxItems" value="50" min="1" max="500">
                         </div>
 
-                        <button id="startBtn" class="btn-primary" onclick="startResearch()">
-                            リサーチ開始
-                        </button>
-                        <button id="stopBtn" class="btn-primary" onclick="stopResearch()" style="display: none; background: #c62828; margin-top: 0.5rem;">
-                            ⏹ 停止
-                        </button>
-
-                        <div class="progress-section" id="progressSection" style="display: none; margin-top: 2rem;">
-                            <div class="progress-bar-bg">
-                                <div id="progressBar" class="progress-bar-fill"></div>
+                        <div class="form-group">
+                            <label>設定</label>
+                            <div class="toggles-group">
+                                <label class="switch-compact">
+                                    <span>即戦力</span>
+                                    <div class="switch">
+                                        <input type="checkbox" id="focusMode">
+                                        <span class="slider"></span>
+                                    </div>
+                                </label>
+                                <label class="switch-compact">
+                                    <span>履歴Skip</span>
+                                    <div class="switch">
+                                        <input type="checkbox" id="skipHistory" checked>
+                                        <span class="slider"></span>
+                                    </div>
+                                </label>
+                                <label class="switch-compact" title="ブラウザを画面に表示して動きを確認します">
+                                    <span>見守る🔍</span>
+                                    <div class="switch">
+                                        <input type="checkbox" id="monitorMode">
+                                        <span class="slider"></span>
+                                    </div>
+                                </label>
                             </div>
-                            <div id="statusText" class="status-text">待機中...</div>
+                        </div>
+
+                        <div style="flex: 1; display: flex; justify-content: flex-end; gap: 0.5rem; min-width: 150px;">
+                            <button id="stopBtn" class="btn-primary btn-stop" onclick="stopResearch()" style="display: none;">
+                                ■ 停止
+                            </button>
+                            <button id="startBtn" class="btn-primary" onclick="startResearch()" style="min-width: 150px;">
+                                ▶ リサーチ開始
+                            </button>
                         </div>
                     </div>
 
-                    <div class="card">
-                        <div class="card-title">💡 AI戦略アドバイス</div>
+                    <!-- Progress Area -->
+                    <div class="progress-section" id="progressSection" style="display: none;">
+                        <!-- Step Indicators -->
+                        <div class="step-indicator" id="stepIndicator">
+                            <div class="step-item" id="step1">
+                                <span class="step-dot">1</span>
+                                <span>サイト巡回</span>
+                            </div>
+                            <div class="step-connector" id="conn1"></div>
+                            <div class="step-item" id="step2">
+                                <span class="step-dot">2</span>
+                                <span>Amazon照合</span>
+                            </div>
+                            <div class="step-connector" id="conn2"></div>
+                            <div class="step-item" id="step3">
+                                <span class="step-dot">3</span>
+                                <span>お宝判定</span>
+                            </div>
+                        </div>
+                        <!-- Slim Progress Bar -->
+                        <div class="progress-bar-bg">
+                            <div id="progressBar" class="progress-bar-fill"></div>
+                        </div>
+                        <!-- Status + ETA -->
+                        <div class="progress-footer">
+                            <span id="statusText" class="status-text">待機中...</span>
+                            <span id="etaText" class="eta-text"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== DASHBOARD CONTENT ===== -->
+            <div class="dashboard-horizontal-main">
+                <!-- Info Panels -->
+                <div class="info-panels">
+                    <div class="card" style="flex: 1; margin-bottom: 0;">
+                        <div class="card-title" style="font-size: 0.95rem;">💡 AI戦略アドバイス</div>
                         <div id="recommendationsList">
-                            <p style="color: #888; font-size: 0.9rem;">結果を分析するとここにヒントが表示されます。</p>
+                            <p style="color: #999; font-size: 0.85rem;">分析ヒントがここに表示されます。</p>
                         </div>
                     </div>
-
-                    <div class="card">
-                        <div class="card-title">📃 ライブログ</div>
+                    <div class="card" style="flex: 2; margin-bottom: 0;">
+                        <div class="card-title" style="font-size: 0.95rem;">📃 ライブログ</div>
                         <div id="logConsole" class="log-console">
                             <div class="log-entry">システム準備完了。</div>
                         </div>
                     </div>
                 </div>
 
-                <div class="main-content">
-                    <div class="card">
-                        <div class="results-header">
-                            <div class="header-left">
-                                <div class="card-title">✨ 抽出結果 <span id="resCount" class="count-badge">0件</span></div>
-                            </div>
-                            <div class="header-filters">
-                                <input type="text" id="tableSearch" placeholder="🔍 キーワード絞り込み..." onkeyup="filterResults()">
-                                <select id="profitFilter" onchange="filterResults()">
-                                    <option value="-999999" selected>全て表示 (マイナス・不一致も含む)</option>
-                                    <option value="0">利益額: 0円以上 (利益品のみ)</option>
-                                    <option value="500">500円以上</option>
-                                    <option value="1000">1000円以上</option>
-                                    <option value="2000">2000円以上</option>
-                                </select>
-
+                <!-- Results Table -->
+                <div class="card">
+                    <div class="results-header">
+                        <div class="header-left">
+                            <div class="card-title" style="margin-bottom: 0; font-size: 1rem;">
+                                ✨ リサーチ結果
+                                <span id="resCount" class="count-badge">0件</span>
+                                <span id="filteredCount" style="font-size: 0.72rem; color: #999; margin-left: 0.3rem;"></span>
+                                <span id="keepaTokens" style="font-size: 0.68rem; color: var(--accent); margin-left: 0.8rem; font-weight: 500;">Keepa: 60トークン</span>
                             </div>
                         </div>
-                        <div id="resultsTableContainer">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>商品情報</th>
-                                        <th>仕入 / Amazon</th>
-                                        <th>利益 / ROI</th>
-                                        <th>Amazon順位</th>
-                                        <th>セラー数</th>
-                                        <th>出品制限</th>
-                                        <th>リンク</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="resultsList">
-                                    <tr id="emptyRow">
-                                        <td colspan="7" style="text-align: center; color: #aaa; padding: 4rem;">
-                                            リサーチを開始してください。
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                        <div class="header-filters">
+                            <input type="text" id="tableSearch" placeholder="🔍 キーワード..." onkeyup="filterResults()">
+                            <select id="profitFilter" onchange="filterResults()">
+                                <option value="-999999" selected>全て表示</option>
+                                <option value="0">利益品のみ</option>
+                                <option value="500">500円以上</option>
+                                <option value="1000">1000円以上</option>
+                                <option value="2000">2000円以上</option>
+                            </select>
+                            <button id="toggleFilteredBtn" class="btn-filter-toggle" onclick="toggleFilteredItems()">
+                                🔼 除外商品も表示
+                            </button>
+                            <button id="resetBtn" class="btn-primary" onclick="clearResults()" style="background: var(--red-ng); padding: 0.4rem 0.8rem; font-size: 0.85rem;">
+                                🗑️ リセット
+                            </button>
                         </div>
+                    </div>
+                    <div id="resultsTableContainer" style="overflow-x: auto;">
+                        <table style="min-width: 1100px;">
+                            <thead>
+                                <tr>
+                                    <th style="width: 24%;">商品情報</th>
+                                    <th>仕入 / AMZ</th>
+                                    <th>利益 / ROI</th>
+                                    <th>順位</th>
+                                    <th>月間販売</th>
+                                    <th>セラー</th>
+                                    <th>出品制限</th>
+                                    <th>リンク</th>
+                                    <th>管理</th>
+                                </tr>
+                            </thead>
+                            <tbody id="resultsList">
+                                <tr id="emptyRow">
+                                    <td colspan="9" style="text-align: center; color: #aaa; padding: 3rem;">
+                                        リサーチを開始してください。
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
         </div>
 
-
         <!-- Settings Tab -->
         <div id="settingsTab" class="tab-content">
-            <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr;">
+            <div class="dashboard-grid">
                 <div class="card">
                     <div class="card-title">🛡️ 規制解除済みブランド管理</div>
-                    <p style="font-size: 0.85rem; color: #666; margin-bottom: 1.5rem;">
-                        ここに登録したブランドは「即戦力モード」で優先的にリサーチされます。解除できたブランドをひとつずつ追加してください。
+                    <p style="font-size: 0.82rem; color: #666; margin-bottom: 1rem;">
+                        解除できたブランドを登録すると「即戦力モード」で優先されます。
                     </p>
-                    <div class="form-group" style="display: flex; gap: 0.5rem;">
+                    <div class="form-group" style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
                         <input type="text" id="newBrandName" placeholder="ブランド名を入力 (例: ナリス)">
-                        <button class="btn-primary" style="width: 100px;" onclick="addBrand()">追加</button>
+                        <button class="btn-primary" style="min-width: 80px;" onclick="addBrand()">追加</button>
                     </div>
-                    <div id="brandList" style="max-height: 400px; overflow-y: auto; padding: 0.5rem; background: #f9f9f9; border-radius: 10px;">
-                        <!-- Brands will be listed here -->
+                    <div id="brandList" style="max-height: 400px; overflow-y: auto; padding: 0.5rem; background: #f9fafb; border-radius: 8px;">
                         <p style="text-align: center; color: #999; padding: 2rem;">読み込み中...</p>
                     </div>
                 </div>
 
                 <div class="card">
                     <div class="card-title">⚙️ システム設定</div>
-                    <div class="form-group">
+                    <div class="form-group" style="margin-bottom: 1rem;">
                         <label>Amazon Seller ID</label>
                         <input type="text" value="A2NPMQUT2ATEAW" disabled>
-                        <p style="font-size: 0.75rem; color: #999; margin-top: 0.3rem;">※Seller IDはセキュアに管理されています。</p>
+                        <p style="font-size: 0.7rem; color: #999; margin-top: 0.2rem;">※セキュアに管理されています</p>
                     </div>
                     <div class="form-group">
                         <label>通知音</label>
@@ -212,6 +254,18 @@
         </div>
     </div>
 
-    <script src="/static/app.js"></script>
+    <!-- Custom Confirmation Modal -->
+    <div id="confirmModal" class="modal-overlay">
+        <div class="modal-content">
+            <div style="font-size: 1.5rem; margin-bottom: 1rem;">📋 確認</div>
+            <p style="margin-bottom: 1.5rem; color: #555;">結果をすべてクリアしますか？<br><small style="color: #888;">※お気に入りにした商品は残ります。</small></p>
+            <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+                <button class="tab-btn" onclick="closeConfirmModal()">キャンセル</button>
+                <button class="btn-primary" style="background: #c62828;" onclick="executeClearResults()">クリア実行</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js?v=20260415"></script>
 </body>
 </html>

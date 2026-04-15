@@ -34,17 +34,26 @@ class YodobashiScraper:
         self.context = None
         self.page = None
 
+    async def _safe_wait(self, min_sec=1, max_sec=3):
+        import random
+        await asyncio.sleep(random.uniform(min_sec, max_sec))
+
     async def start(self):
         self.playwright = await async_playwright().start()
+        
+        launch_args = [
+            "--disable-dev-shm-usage",
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-blink-features=AutomationControlled"
+        ]
+        if self.headless:
+            launch_args.append("--disable-gpu")
+
         self.browser = await self.playwright.chromium.launch(
             headless=self.headless,
-            args=[
-                "--disable-blink-features=AutomationControlled",
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-                "--disable-infobars",
-                "--disable-http2",
-            ]
+            channel="chrome",
+            args=launch_args
         )
         self.context = await self.browser.new_context(
             user_agent=(
@@ -85,6 +94,7 @@ class YodobashiScraper:
         skip_jans=None,
     ) -> AsyncGenerator[dict, None]:
 
+        logger.info(f"[YodobashiScraper] scrape_products 開始。base_url={base_url}, ページ={start_page}-{end_page}, 最大={max_items}件")
         count = 0
         skip_jans = skip_jans or []
 
@@ -108,27 +118,54 @@ class YodobashiScraper:
             # ---- Build paged URL ----
             parsed = urlparse(base_url)
             qp = parse_qs(parsed.query)
-            qp["page"] = [str(page_num)]
-            qp["sorttyp"] = [yodo_sort]
-            target_url = urlunparse((
-                parsed.scheme, parsed.netloc, parsed.path,
-                parsed.params, urlencode(qp, doseq=True), parsed.fragment,
-            ))
+            
+            path_parts = [p for p in parsed.path.split('/') if p]
+            numeric_ids = [p for p in path_parts if p.isdigit()]
 
-            logger.info(f"[Yodobashi] Page {page_num}: {target_url}")
-            yield {"type": "log", "msg": f"📄 ヨドバシ ページ {page_num} を読み込み中..."}
+            if "category" in path_parts and "word" not in qp:
+                if len(numeric_ids) == 1:
+                    # ---- シンプルな1階層カテゴリー: search endpoint に変換（リダイレクト回避） ----
+                    cate_id = numeric_ids[0]
+                    target_url = f"https://www.yodobashi.com/?word=&cate={cate_id}&sorttyp={yodo_sort}&page={page_num}"
+                    logger.info(f"[Yodobashi] 単純カテゴリーURL → search endpoint に変換: {target_url}")
+                else:
+                    # ---- 深い階層カテゴリー（2階層以上）: URL直接使用でページング追加 ----
+                    # 末尾IDだけを取り出すと別カテゴリーに飛ぶため変換しない
+                    qp["page"] = [str(page_num)]
+                    qp["sorttyp"] = [yodo_sort]
+                    target_url = urlunparse((
+                        parsed.scheme, parsed.netloc, parsed.path,
+                        parsed.params, urlencode(qp, doseq=True), parsed.fragment,
+                    ))
+                    logger.info(f"[Yodobashi] 深い階層カテゴリーURL → そのまま使用: {target_url}")
+            else:
+                qp["page"] = [str(page_num)]
+                qp["sorttyp"] = [yodo_sort]
+                target_url = urlunparse((
+                    parsed.scheme, parsed.netloc, parsed.path,
+                    parsed.params, urlencode(qp, doseq=True), parsed.fragment,
+                ))
+
+
+            logger.info(f"[Yodobashi] Starting fetch. Page {page_num}: {target_url}")
+            yield {"type": "log", "msg": f"📄 ヨドバシ ページ {page_num} を読み込み中... ({target_url[:50]}...)"}
 
             try:
                 await self.page.goto(target_url, wait_until="domcontentloaded", timeout=45000)
-                await asyncio.sleep(4)
+                await self._safe_wait(3, 5)
+                # Human-like scrolling
+                await self.page.evaluate("window.scrollTo(0, document.body.scrollHeight/4)")
+                await self._safe_wait(0.5, 1.5)
+                await self.page.evaluate("window.scrollTo(0, document.body.scrollHeight/2)")
+                await self._safe_wait(0.5, 1.5)
             except Exception as e:
                 logger.error(f"Page load error: {e}")
                 yield {"type": "log", "msg": f"⚠️ ページ {page_num} の読み込みに失敗。リトライ中..."}
                 # Retry once with a longer wait
                 try:
-                    await asyncio.sleep(3)
+                    await self._safe_wait(3, 5)
                     await self.page.goto(target_url, wait_until="domcontentloaded", timeout=60000)
-                    await asyncio.sleep(5)
+                    await self._safe_wait(4, 6)
                 except Exception:
                     yield {"type": "log", "msg": f"❌ ページ {page_num} を読み込めません。スキップします。"}
                     continue
@@ -166,7 +203,9 @@ class YodobashiScraper:
 
                 try:
                     await self.page.goto(item_url, wait_until="domcontentloaded", timeout=30000)
-                    await asyncio.sleep(2)
+                    await self._safe_wait(1, 3)
+                    await self.page.evaluate("window.scrollTo(0, 400)")
+                    await self._safe_wait(0.5, 1.5)
                 except Exception as e:
                     logger.error(f"Product page load error: {e}")
                     continue
@@ -255,6 +294,31 @@ class YodobashiScraper:
         except Exception:
             pass
         return ""
+
+    async def get_stats(self, url):
+        try:
+            await self.page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            await asyncio.sleep(2)
+            
+            # Extract count from ".resCnt" or similar (e.g. "1,234件中")
+            total_items = 0
+            for sel in [".resCnt", ".num", ".cnt"]:
+                elem = self.page.locator(sel).first
+                if await elem.count() > 0:
+                    txt = await elem.text_content()
+                    digits = re.sub(r'[^\d]', '', txt)
+                    if digits:
+                        total_items = int(digits)
+                        break
+            
+            return {
+                "total_items": total_items,
+                "items_per_page": 20 # Standard for Yodobashi
+            }
+        except Exception as e:
+            logger.error(f"Error getting stats: {e}")
+            return None
+
 
     async def stop(self):
         try:

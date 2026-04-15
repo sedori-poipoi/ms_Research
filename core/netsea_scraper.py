@@ -38,20 +38,34 @@ class NetseaScraper:
 
     async def start(self):
         self.playwright = await async_playwright().start()
+        launch_args = [
+            "--disable-dev-shm-usage",
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-blink-features=AutomationControlled"
+        ]
+        if self.headless:
+            launch_args.append("--disable-gpu")
+
         self.browser = await self.playwright.chromium.launch(
             headless=self.headless,
-            args=[
-                "--disable-blink-features=AutomationControlled",
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-            ]
+            channel="chrome",
+            args=launch_args
         )
         self.context = await self.browser.new_context(
-            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
             viewport={"width": 1280, "height": 800},
             locale="ja-JP"
         )
         self.page = await self.context.new_page()
+        
+        # webdriver検知回避などのステルス化
+        await self.page.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+            window.chrome = { runtime: {} };
+            Object.defineProperty(navigator, 'languages', { get: () => ['ja-JP', 'ja', 'en-US', 'en'] });
+            Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+        """)
 
     async def login(self):
         netsea_id = os.getenv("NETSEA_ID")
@@ -226,6 +240,25 @@ class NetseaScraper:
                         },
                     }
                     await self._safe_wait(0.5, 1.5)
+
+    async def get_stats(self, url):
+        try:
+            await self.page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            await self._safe_wait(2, 4)
+            # Find item count text (varies on NETSEA)
+            total_items = 0
+            body_txt = await self.page.locator("body").text_content()
+            m = re.search(r"全\s*([0-9,]+)\s*件", body_txt)
+            if m:
+                total_items = int(m.group(1).replace(",", ""))
+            
+            return {
+                "total_items": total_items,
+                "items_per_page": 20 
+            }
+        except Exception as e:
+            logger.error(f"Error getting stats: {e}")
+            return None
 
     async def stop(self):
         if self.browser:

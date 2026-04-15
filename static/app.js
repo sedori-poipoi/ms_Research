@@ -1,5 +1,6 @@
 let processedIds = new Set();
 let isSoundEnabled = true;
+let showFiltered = false; // 除外商品を表示するかどうかのフラグ
 
 // --- Tab Management ---
 function switchTab(tabName) {
@@ -92,68 +93,50 @@ function updateCategories() {
     const sortSelect = document.getElementById('sortOrder');
     const customUrlInput = document.getElementById('customUrl');
 
+    const catContainer = document.getElementById('categoryContainer');
+    if (!catContainer) return; // If UI is broken
+    let categories = [];
     if (targetSite === 'yodobashi') {
-        catSelect.innerHTML = `
-            <option value="pet">🐾 ペット用品・フード</option>
-            <option value="appliances">🏠 生活家電</option>
-            <option value="pc">💻 パソコン・周辺機器</option>
-            <option value="outlet">🔥 アウトレット・在庫処分品</option>
-            <option value="home">🏡 家電・日用品全般</option>
-            <option value="camera">📷 カメラ・写真</option>
-            <option value="audio">🎧 オーディオ</option>
-            <option value="kitchen">🍳 キッチン用品・食器</option>
-            <option value="health">💊 ヘルス＆ビューティー</option>
-            <option value="toys">🧸 おもちゃ・ホビー</option>
-            <option value="food">🍙 食品・飲料・お酒</option>
-        `;
-        sortSelect.innerHTML = `
-            <option value="new_arrival">新着順</option>
-            <option value="price_asc">価格が安い順</option>
-            <option value="price_desc">価格が高い順</option>
-            <option value="score">人気順</option>
-        `;
-        customUrlInput.placeholder = 'https://www.yodobashi.com/category/...';
+        categories = [
+            {value:"pet",label:"🐾 ペット・フード"},{value:"appliances",label:"🏠 生活家電"},
+            {value:"pc",label:"💻 パソコン"},{value:"outlet",label:"🔥 アウトレット"},
+            {value:"home",label:"🏡 家電・日用品"},{value:"camera",label:"📷 カメラ"},
+            {value:"audio",label:"🎧 オーディオ"},{value:"kitchen",label:"🍳 キッチン"},
+            {value:"health",label:"💊 ヘルス＆ビューティー"},{value:"toys",label:"🧸 おもちゃ"},
+            {value:"food",label:"🍙 食品・飲料"}
+        ];
+        sortSelect.innerHTML = `<option value="new_arrival">新着順</option><option value="price_asc">価格が安い順</option><option value="price_desc">価格が高い順</option><option value="score">人気順</option>`;
+        customUrlInput.placeholder = 'https://www.yodobashi.com/...';
     } else if (targetSite === 'netsea') {
-        catSelect.innerHTML = `
-            <option value="sale">🔥 ゲリラセール・クーポン対象</option>
-            <option value="makeup">💄 メイク・コスメ全般</option>
-            <option value="skincare">💧 スキンケア・基礎化粧品</option>
-            <option value="haircare">🛁 ヘアケア</option>
-            <option value="health">💊 衛生日用品・健康関連</option>
-            <option value="food">🍙 食品・お菓子</option>
-            <option value="drink">🍹 飲料・レトルト</option>
-            <option value="daily">🏡 キッチン・バス・生活雑貨</option>
-        `;
-        sortSelect.innerHTML = `
-            <option value="new_arrival">新着順</option>
-            <option value="price_asc">価格が安い順</option>
-            <option value="price_desc">価格が高い順</option>
-        `;
-        customUrlInput.placeholder = 'https://www.netsea.jp/search/...';
+        categories = [
+            {value:"sale",label:"🔥 セール品"},{value:"makeup",label:"💄 メイク"},
+            {value:"skincare",label:"💧 スキンケア"},{value:"haircare",label:"🛁 ヘアケア"},
+            {value:"health",label:"💊 健康・衛生"},{value:"food",label:"🍙 食品"},
+            {value:"drink",label:"🍹 飲料"},{value:"daily",label:"🏡 日用品"}
+        ];
+        sortSelect.innerHTML = `<option value="new_arrival">新着順</option><option value="price_asc">価格が安い順</option><option value="price_desc">価格が高い順</option>`;
+        customUrlInput.placeholder = 'https://www.netsea.jp/...';
     } else {
-        catSelect.innerHTML = `
-            <option value="sale">🔥 お得な限定・セール品</option>
-            <option value="makeup">💄 メイク全般（口紅・マスカラ等）</option>
-            <option value="skincare">💧 スキンケア・基礎化粧品</option>
-            <option value="mask">🧽 フェイスマスク・パック</option>
-            <option value="haircare">🛁 ヘアケア全般</option>
-            <option value="bodycare">🧴 ボディケア・ハンドケア</option>
-            <option value="fragrance">🌹 フレグランス</option>
-        `;
-        sortSelect.innerHTML = `
-            <option value="disp_from_datetime">新着順</option>
-            <option value="selling_price0_min">価格が安い順</option>
-            <option value="selling_price0_max">価格が高い順</option>
-            <option value="review">クチコミが多い順</option>
-        `;
+        categories = [
+            {value:"sale",label:"🔥 セール品"},{value:"makeup",label:"💄 メイク"},
+            {value:"skincare",label:"💧 スキンケア"},{value:"mask",label:"🧽 マスク"},
+            {value:"haircare",label:"🛁 ヘアケア"},{value:"bodycare",label:"🧴 ボディケア"},
+            {value:"fragrance",label:"🌹 香水"}
+        ];
+        sortSelect.innerHTML = `<option value="disp_from_datetime">新着順</option><option value="selling_price0_min">価格が安い順</option><option value="selling_price0_max">価格が高い順</option><option value="review">クチコミが多い順</option>`;
         customUrlInput.placeholder = 'https://www.make-up-solution.com/...';
     }
+
+    catContainer.innerHTML = categories.map(c => `
+        <label class="chip-checkbox ${targetSite}">
+            <input type="checkbox" name="category" value="${c.value}" ${c.value==='makeup'||c.value==='sale'?'checked':''}>
+            <span>${c.label}</span>
+        </label>`).join('');
 }
 
 // --- Start Research ---
 async function startResearch() {
     const targetSite = document.getElementById('targetSite').value;
-    const category = document.getElementById('category').value;
     const customUrl = document.getElementById('customUrl').value;
     const maxItems = document.getElementById('maxItems').value;
     const startPage = document.getElementById('startPage').value;
@@ -161,9 +144,17 @@ async function startResearch() {
     const sortOrder = document.getElementById('sortOrder').value;
     const focusMode = document.getElementById('focusMode').checked;
     const skipHistory = document.getElementById('skipHistory').checked;
+    const monitorMode = document.getElementById('monitorMode').checked;
     const startBtn = document.getElementById('startBtn');
+    
+    const checkboxes = document.querySelectorAll('input[name="category"]:checked');
+    // カスタムURLがある場合は、チェックボックスのカテゴリーを完全に無視する（最優先ルール）
+    const categories = (customUrl && customUrl.trim().startsWith('http')) ? [] : Array.from(checkboxes).map(cb => cb.value);
 
-    startBtn.disabled = true;
+    startBtn.style.display = 'none';
+    const stopBtn = document.getElementById('stopBtn');
+    if(stopBtn) stopBtn.style.display = 'block';
+
     document.getElementById('progressSection').style.display = 'block';
     document.getElementById('resultsList').innerHTML = '';
     processedIds.clear();
@@ -173,28 +164,146 @@ async function startResearch() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
             target_site: targetSite,
-            category, 
-            custom_url: customUrl,
+            categories: categories, 
+            custom_url: customUrl || null,
             max_items: parseInt(maxItems), 
             start_page: parseInt(startPage),
             end_page: parseInt(endPage),
             sort_order: sortOrder,
             focus_mode: focusMode,
-            skip_history: skipHistory
+            skip_history: skipHistory,
+            monitor_mode: monitorMode
         })
     });
 
     const result = await response.json();
     if (result.status === 'error') {
         alert(result.message);
-        startBtn.disabled = false;
+        startBtn.style.display = 'block';
+        if(stopBtn) stopBtn.style.display = 'none';
     }
 }
 
-// --- Stop Research ---
+// --- Stop / Clear Research ---
 async function stopResearch() {
     await fetch('/stop', { method: 'POST' });
+    // 停止後に即座にUIを更新（SSEのレスポンスを待たずにボタンを復活させる）
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    if (startBtn) {
+        startBtn.style.display = 'block';
+        startBtn.innerText = 'リサーチ開始';
+        startBtn.disabled = false;
+    }
+    if (stopBtn) stopBtn.style.display = 'none';
 }
+
+// --- Filter Toggle ---
+function toggleFilteredItems() {
+    showFiltered = !showFiltered;
+    const btn = document.getElementById('toggleFilteredBtn');
+    if (btn) {
+        btn.innerHTML = showFiltered ? '🔽 除外を隠す' : '🔼 除外商品も表示';
+        // アクティブな時の色味を変えるためのクラス切り替え
+        btn.classList.toggle('active', showFiltered);
+    }
+    filterResults();
+}
+
+async function toggleFavorite(resId, currentStatus) {
+    const nextStatus = !currentStatus;
+    try {
+        const res = await fetch(`/results/${resId}/toggle_favorite`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: nextStatus })
+        });
+        if (res.ok && lastData) {
+            const item = lastData.results.find(r => r.id === resId);
+            if (item) item.is_favorite = nextStatus ? 1 : 0;
+            updateResultsList(lastData, true); // 強制描画
+        }
+    } catch (err) {
+        console.error("Favorite toggle failed:", err);
+    }
+}
+
+async function toggleChecked(resId, currentStatus) {
+    const nextStatus = !currentStatus;
+    try {
+        const res = await fetch(`/results/${resId}/toggle_checked`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: nextStatus })
+        });
+        if (res.ok && lastData) {
+            const item = lastData.results.find(r => r.id === resId);
+            if (item) item.is_checked = nextStatus ? 1 : 0;
+            updateResultsList(lastData, true); // 強制描画
+        }
+    } catch (err) {
+        console.error("Check toggle failed:", err);
+    }
+}
+
+
+// --- Custom Modal Logic ---
+function openConfirmModal() {
+    const modal = document.getElementById('confirmModal');
+    if (modal) modal.style.display = 'flex';
+}
+
+function closeConfirmModal() {
+    const modal = document.getElementById('confirmModal');
+    if (modal) modal.style.display = 'none';
+}
+
+async function executeClearResults() {
+    closeConfirmModal();
+    
+    // 即座にシャッターを閉める（サーバーからの古い定期便を無視開始）
+    window.isResetting = true;
+    setTimeout(() => { window.isResetting = false; }, 3000); // 念のため3秒に延長
+    
+    try {
+        const response = await fetch('/results/clear?t=' + Date.now(), { method: 'POST' });
+        const result = await response.json();
+        if (result.status === 'success') {
+            // Force clear UI immediately
+            document.getElementById('resultsList').innerHTML = '';
+            document.getElementById('resCount').textContent = '0件';
+            const recList = document.getElementById('recommendationsList');
+            recList.innerHTML = '<p style="color: #888; font-size: 0.9rem;">分析ヒントがここに表示されます。</p>';
+            recList.dataset.lastRecData = "RESET_LOCKED";
+            
+            // ライブログもリセット
+            const logBox = document.getElementById('logConsole');
+            if (logBox) logBox.innerHTML = '';
+
+            processedIds.clear();
+            if (lastData) {
+                lastData.results = [];
+                lastData.recommendations = [];
+                lastData.logs = [];
+            }
+            
+            // フィードバック
+            const btn = document.getElementById('resetBtn');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '✅ クリア完了';
+            setTimeout(() => { btn.innerHTML = originalText; }, 2000);
+        }
+    } catch (e) {
+        window.isResetting = false; // エラー時は解除
+        console.error("Clear error:", e);
+    }
+}
+
+
+async function clearResults() {
+    openConfirmModal(); // ネイティブダイアログを廃止してモーダルに
+}
+
 
 // --- Filtering ---
 let lastData = null;
@@ -203,7 +312,7 @@ function filterResults() {
     updateResultsList(lastData);
 }
 
-function updateResultsList(data) {
+function updateResultsList(data, force = false) {
     const resultsList = document.getElementById('resultsList');
     const searchTerm = document.getElementById('tableSearch').value.toLowerCase();
     const minProfit = parseInt(document.getElementById('profitFilter').value);
@@ -213,17 +322,40 @@ function updateResultsList(data) {
                             item.brand.toLowerCase().includes(searchTerm) ||
                             (item.jan && item.jan.includes(searchTerm));
         const matchesProfit = item.profit >= minProfit;
+        
+        // --- 除外条件の適用 ---
+        // showFilteredがfalse（デフォルト）の場合、システム側で除外判定されたものは隠す
+        const isSystemExcluded = item.filter_status === 'filtered';
+        if (isSystemExcluded && !showFiltered) return false;
+
         return matchesSearch && matchesProfit;
     });
 
+    // 除外件数のバッジ表示（「(10件を除外中)」のような表示）
+    const filteredCountBadge = document.getElementById('filteredCount');
+    if (filteredCountBadge) {
+        const allPossibleResults = data.results.filter(item => {
+            const ms = item.title.toLowerCase().includes(searchTerm) || 
+                       item.brand.toLowerCase().includes(searchTerm) ||
+                       (item.jan && item.jan.includes(searchTerm));
+            return ms && (item.profit >= minProfit);
+        });
+        const hiddenCount = allPossibleResults.length - filtered.length;
+        if (hiddenCount > 0 && !showFiltered) {
+            filteredCountBadge.textContent = `(${hiddenCount}件を除外中)`;
+        } else {
+            filteredCountBadge.textContent = '';
+        }
+    }
+
     const filteredIds = filtered.map(item => item.id).join(',');
-    if (resultsList.dataset.lastIds === filteredIds && !data.is_running) return;
+    if (!force && resultsList.dataset.lastIds === filteredIds && !data.is_running) return;
     resultsList.dataset.lastIds = filteredIds;
 
     if (filtered.length === 0) {
         resultsList.innerHTML = `
             <tr>
-                <td colspan="7" style="text-align: center; color: #aaa; padding: 4rem;">
+                <td colspan="9" style="text-align: center; color: #aaa; padding: 4rem;">
                     利益商品が見つかるまでお待ちください...
                 </td>
             </tr>
@@ -237,7 +369,26 @@ function updateResultsList(data) {
             playNotificationSound();
         }
 
-        const badgeClass = item.restriction.includes('出品可') ? 'badge-ok' : 'badge-ng';
+        let restrictionHtml = `<span class="badge badge-dim">${item.restriction || '確認中'}</span>`;
+        if (item.restriction && item.restriction.includes('出品可能')) {
+            restrictionHtml = `<span class="badge badge-ok">✅ 出品可能</span>`;
+        } else if (item.restriction_code === 'APPROVAL_REQUIRED') {
+            restrictionHtml = `
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
+                    <span class="badge badge-approval">🚪 申請への入り口 (書類の可能性あり)</span>
+                    ${item.approval_url ? `<a href="${item.approval_url}" target="_blank" class="approval-btn">出品申請ページへ</a>` : ''}
+                </div>
+            `;
+        } else if (item.restriction_code === 'NOT_ELIGIBLE') {
+            restrictionHtml = `<span class="badge badge-not-eligible">🏰 現在は解除不可</span>`;
+        } else if (item.restriction && item.restriction.includes('制限')) {
+            restrictionHtml = `
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
+                    <span class="badge badge-ng">⚠️ 制限（詳細な審査が必要）</span>
+                    ${item.approval_url ? `<a href="${item.approval_url}" target="_blank" class="approval-btn">出品申請ページへ</a>` : ''}
+                </div>
+            `;
+        }
         const profitBadge = item.judgment.includes('利益商品') ? '<span class="badge badge-profit">利益品</span>' : '';
 
         const profitSign = item.profit > 0 ? '+' : '';
@@ -250,21 +401,39 @@ function updateResultsList(data) {
             rankClass = 'badge-rank';
         }
 
-        // Defensive check for ms_url to prevent crash
         const safeMsUrl = item.ms_url || '';
         const sourceLabel = safeMsUrl.includes('yodobashi') ? 'ヨドバシ' : '仕入先';
         const safeAmzUrl = item.amazon_url || `https://www.amazon.co.jp/dp/${item.asin}`;
         const safeKeepaUrl = item.keepa_url || `https://keepa.com/#!product/5-${item.asin}`;
 
+        const amzListing = item.amazon_listing_price || 0;
+        const amzShipping = item.amazon_shipping || 0;
+        let amzPriceHtml = `<b>¥${(amzListing + amzShipping).toLocaleString()}</b>`;
+        if (amzShipping > 0) {
+            amzPriceHtml = `<b>¥${amzListing.toLocaleString()}</b> <span style="font-size: 0.7rem; color: #888;">(+送料¥${amzShipping.toLocaleString()})</span>`;
+        } else if (item.amazon_price && amzListing === 0) {
+            // Fallback to legacy field format if new format isn't present
+            amzPriceHtml = `<b>¥${item.amazon_price.toLocaleString()}</b>`;
+        }
+
+        let filterReasonHtml = '';
+        if (item.filter_status === 'filtered' && item.filter_reason) {
+            filterReasonHtml = `<div style="font-size: 0.75rem; color: #c62828; margin-top: 4px; padding: 2px 4px; background: #ffebee; border-radius: 4px; display: inline-block;">⚠️ 除外理由: ${item.filter_reason}</div>`;
+        }
+
+        const isFavorite = item.is_favorite === 1;
+        const isChecked = item.is_checked === 1;
+
         return `
-            <tr class="result-row">
+            <tr class="result-row ${isChecked ? 'checked-row' : ''}">
                 <td style="max-width: 250px;">
                     <div style="font-weight: 600; font-size: 0.9rem;">${item.title}</div>
                     <div style="font-size: 0.75rem; color: #777; margin-top: 0.3rem;">${item.brand} | ${item.jan && item.jan !== '—' ? 'JAN: ' + item.jan : 'キーワード照合'}</div>
+                    ${filterReasonHtml}
                 </td>
                 <td>
                     <div style="font-size: 0.85rem; color: #555;">${sourceLabel}: <b>¥${(item.price || 0).toLocaleString()}</b></div>
-                    <div style="font-size: 0.85rem; color: #555;">AMZ: <b>¥${(item.amazon_price || 0).toLocaleString()}</b></div>
+                    <div style="font-size: 0.85rem; color: #555; white-space: nowrap;">AMZ: ${amzPriceHtml}</div>
                 </td>
                 <td>
                     <div class="profit-cell">
@@ -280,14 +449,23 @@ function updateResultsList(data) {
                     </div>
                 </td>
                 <td style="text-align: center;">
-                    <div style="font-weight: 700; font-size: 1.1rem; color: #444;">${item.sellers || '—'}<span style="font-size: 0.7rem; font-weight: normal; margin-left: 2px;">人</span></div>
+                    <div style="font-weight: 700; font-size: 1rem; color: #444;">${item.monthly_sales || '—'}</div>
                 </td>
-                <td><span class="badge ${badgeClass}">${item.restriction || '確認中'}</span></td>
+                <td style="text-align: center;">
+                    <div style="font-weight: 700; font-size: 1rem; color: #444;">${item.sellers || '—'}<span style="font-size: 0.7rem; font-weight: normal; margin-left: 2px;">人</span></div>
+                </td>
+                <td>${restrictionHtml}</td>
                 <td>
                     <div class="link-group">
                         <a href="${safeAmzUrl}" target="_blank" class="link-icon">AMZ</a>
                         <a href="${safeKeepaUrl}" target="_blank" class="link-icon">Keepa</a>
                         <a href="${safeMsUrl}" target="_blank" class="link-icon">仕入先</a>
+                    </div>
+                </td>
+                <td>
+                    <div class="mgmt-group">
+                        <button class="btn-mgmt btn-fav ${isFavorite ? 'active' : ''}" onclick="toggleFavorite('${item.id}', ${isFavorite})" title="お気に入り">⭐</button>
+                        <button class="btn-mgmt btn-check ${isChecked ? 'active' : ''}" onclick="toggleChecked('${item.id}', ${isChecked})" title="チェック完了">✅</button>
                     </div>
                 </td>
             </tr>
@@ -304,7 +482,9 @@ eventSource.onmessage = function(event) {
 };
 
 function updateUI(data) {
+    if (window.isResetting) return; // リセット直後の残像を無視する
     lastData = data;
+
     const startBtn = document.getElementById('startBtn');
     const stopBtn = document.getElementById('stopBtn');
     const progressBar = document.getElementById('progressBar');
@@ -314,6 +494,8 @@ function updateUI(data) {
     const resCount = document.getElementById('resCount');
 
     startBtn.disabled = data.is_running;
+    startBtn.style.display = data.is_running ? 'none' : 'block';
+    
     if (stopBtn) stopBtn.style.display = data.is_running ? 'inline-block' : 'none';
 
     if (data.is_running) {
@@ -335,13 +517,25 @@ function updateUI(data) {
         </div>
     `).join('');
     
-    if (recommendationsList.innerHTML !== recHtml) {
+    // Use data comparison to prevent flicker
+    const recDataStr = JSON.stringify(data.recommendations);
+    if (recommendationsList.dataset.lastRecData !== recDataStr) {
+        recommendationsList.dataset.lastRecData = recDataStr;
         recommendationsList.innerHTML = recHtml || (data.is_running ? '' : '<p style="color: #888; font-size: 0.9rem;">分析ヒントがここに表示されます。</p>');
     }
+
 
     resCount.innerText = `${data.results.length}件`;
     updateResultsList(data);
 }
 
-// Initial brand load
-fetchBrands();
+// Initial load
+document.addEventListener('DOMContentLoaded', () => {
+    fetchBrands();
+    updateCategories();
+    
+    const resetBtn = document.getElementById('resetBtn');
+    if (resetBtn) {
+        resetBtn.addEventListener('click', clearResults);
+    }
+});
