@@ -5,26 +5,10 @@ import re
 from urllib.parse import urlparse, parse_qs, urlunparse, urlencode
 from typing import AsyncGenerator
 from playwright.async_api import async_playwright
+from core.site_config import YODOBASHI_CATEGORIES
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-
-
-# Yodobashi category URL map (top-level categories researched from site)
-YODOBASHI_CATEGORIES = {
-    "outlet":       ("アウトレット",       "https://www.yodobashi.com/ec/category/index.html?word=%E3%82%A2%E3%82%A6%E3%83%88%E3%83%AC%E3%83%83%E3%83%88"),
-    "home":         ("家電・日用品",       "https://www.yodobashi.com/category/170063/"),
-    "appliances":   ("生活家電",           "https://www.yodobashi.com/category/6353/"),
-    "pc":           ("パソコン・周辺機器", "https://www.yodobashi.com/category/19531/"),
-    "camera":       ("カメラ・写真",       "https://www.yodobashi.com/category/19055/"),
-    "audio":        ("オーディオ",         "https://www.yodobashi.com/category/22052/500000073035/"),
-    "pet":          ("ペット用品・フード", "https://www.yodobashi.com/category/162842/166369/"),
-    "kitchen":      ("キッチン用品・食器", "https://www.yodobashi.com/category/162842/162843/"),
-    "health":       ("ヘルス＆ビューティー", "https://www.yodobashi.com/category/159888/"),
-    "toys":         ("おもちゃ・ホビー",   "https://www.yodobashi.com/category/141001/141336/"),
-    "food":         ("食品・飲料・お酒",   "https://www.yodobashi.com/category/157851/"),
-}
-
 
 class YodobashiScraper:
     def __init__(self, headless=False):
@@ -81,6 +65,42 @@ class YodobashiScraper:
         logger.info("YodobashiScraper: No login required for this flow.")
         return "guest"
 
+    def _build_listing_url(self, base_url, page_num, sort_order):
+        sort_map = {
+            "new_arrival": "new_arrival",
+            "price_asc": "price_asc",
+            "price_desc": "price_desc",
+            "score": "score",
+            "disp_from_datetime": "new_arrival",
+            "selling_price0_min": "price_asc",
+            "selling_price0_max": "price_desc",
+        }
+        yodo_sort = sort_map.get(sort_order, "new_arrival")
+
+        parsed = urlparse(base_url)
+        qp = parse_qs(parsed.query)
+        path_parts = [p for p in parsed.path.split('/') if p]
+        numeric_ids = [p for p in path_parts if p.isdigit()]
+
+        if "category" in path_parts and "word" not in qp:
+            if len(numeric_ids) == 1:
+                cate_id = numeric_ids[0]
+                return f"https://www.yodobashi.com/?word=&cate={cate_id}&sorttyp={yodo_sort}&page={page_num}"
+
+            qp["page"] = [str(page_num)]
+            qp["sorttyp"] = [yodo_sort]
+            return urlunparse((
+                parsed.scheme, parsed.netloc, parsed.path,
+                parsed.params, urlencode(qp, doseq=True), parsed.fragment,
+            ))
+
+        qp["page"] = [str(page_num)]
+        qp["sorttyp"] = [yodo_sort]
+        return urlunparse((
+            parsed.scheme, parsed.netloc, parsed.path,
+            parsed.params, urlencode(qp, doseq=True), parsed.fragment,
+        ))
+
     # ------------------------------------------------------------------
     # Scraping
     # ------------------------------------------------------------------
@@ -98,55 +118,11 @@ class YodobashiScraper:
         count = 0
         skip_jans = skip_jans or []
 
-        # Map MS-compatible sort keys → Yodobashi sorttyp values
-        sort_map = {
-            "new_arrival": "new_arrival",
-            "price_asc": "price_asc",
-            "price_desc": "price_desc",
-            "score": "score",
-            # MS-compatible aliases
-            "disp_from_datetime": "new_arrival",
-            "selling_price0_min": "price_asc",
-            "selling_price0_max": "price_desc",
-        }
-        yodo_sort = sort_map.get(sort_order, "new_arrival")
-
         for page_num in range(start_page, end_page + 1):
             if count >= max_items:
                 break
 
-            # ---- Build paged URL ----
-            parsed = urlparse(base_url)
-            qp = parse_qs(parsed.query)
-            
-            path_parts = [p for p in parsed.path.split('/') if p]
-            numeric_ids = [p for p in path_parts if p.isdigit()]
-
-            if "category" in path_parts and "word" not in qp:
-                if len(numeric_ids) == 1:
-                    # ---- シンプルな1階層カテゴリー: search endpoint に変換（リダイレクト回避） ----
-                    cate_id = numeric_ids[0]
-                    target_url = f"https://www.yodobashi.com/?word=&cate={cate_id}&sorttyp={yodo_sort}&page={page_num}"
-                    logger.info(f"[Yodobashi] 単純カテゴリーURL → search endpoint に変換: {target_url}")
-                else:
-                    # ---- 深い階層カテゴリー（2階層以上）: URL直接使用でページング追加 ----
-                    # 末尾IDだけを取り出すと別カテゴリーに飛ぶため変換しない
-                    qp["page"] = [str(page_num)]
-                    qp["sorttyp"] = [yodo_sort]
-                    target_url = urlunparse((
-                        parsed.scheme, parsed.netloc, parsed.path,
-                        parsed.params, urlencode(qp, doseq=True), parsed.fragment,
-                    ))
-                    logger.info(f"[Yodobashi] 深い階層カテゴリーURL → そのまま使用: {target_url}")
-            else:
-                qp["page"] = [str(page_num)]
-                qp["sorttyp"] = [yodo_sort]
-                target_url = urlunparse((
-                    parsed.scheme, parsed.netloc, parsed.path,
-                    parsed.params, urlencode(qp, doseq=True), parsed.fragment,
-                ))
-
-
+            target_url = self._build_listing_url(base_url, page_num, sort_order)
             logger.info(f"[Yodobashi] Starting fetch. Page {page_num}: {target_url}")
             yield {"type": "log", "msg": f"📄 ヨドバシ ページ {page_num} を読み込み中... ({target_url[:50]}...)"}
 
@@ -197,9 +173,8 @@ class YodobashiScraper:
                 if count >= max_items:
                     break
 
-                count += 1
-                logger.info(f"[Yodobashi] Scraping [{count}/{max_items}]: {item_url}")
-                yield {"type": "log", "msg": f"🔍 商品を分析中... ({count}/{max_items})"}
+                logger.info(f"[Yodobashi] Scraping candidate [{count + 1}/{max_items}]: {item_url}")
+                yield {"type": "log", "msg": f"🔍 商品を分析中... ({count + 1}/{max_items})"}
 
                 try:
                     await self.page.goto(item_url, wait_until="domcontentloaded", timeout=30000)
@@ -218,6 +193,8 @@ class YodobashiScraper:
 
                 if jan_code and jan_code in skip_jans:
                     continue
+
+                count += 1
 
                 yield {
                     "type": "item",
@@ -297,7 +274,8 @@ class YodobashiScraper:
 
     async def get_stats(self, url):
         try:
-            await self.page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            target_url = self._build_listing_url(url, 1, "new_arrival")
+            await self.page.goto(target_url, wait_until="domcontentloaded", timeout=30000)
             await asyncio.sleep(2)
             
             # Extract count from ".resCnt" or similar (e.g. "1,234件中")
@@ -310,10 +288,30 @@ class YodobashiScraper:
                     if digits:
                         total_items = int(digits)
                         break
+
+            product_links = await self.page.locator('a[href*="/product/"]').all()
+            items_per_page = len({
+                ((await el.get_attribute("href")) or "").split("?")[0]
+                for el in product_links
+                if await el.get_attribute("href")
+            })
+
+            if total_items == 0:
+                body_text = await self.page.locator("body").text_content()
+                if body_text:
+                    count_candidates = [
+                        int(candidate.replace(",", ""))
+                        for candidate in re.findall(r"([0-9][0-9,]*)\s*件", body_text)
+                    ]
+                    if count_candidates:
+                        total_items = max(count_candidates)
+
+            if total_items == 0 and items_per_page:
+                total_items = items_per_page
             
             return {
                 "total_items": total_items,
-                "items_per_page": 20 # Standard for Yodobashi
+                "items_per_page": items_per_page or 20,
             }
         except Exception as e:
             logger.error(f"Error getting stats: {e}")

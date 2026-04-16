@@ -12,17 +12,21 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
-from dotenv import load_dotenv
-
 from core.scraper import MakeUpSolutionScraper
-from core.yodobashi_scraper import YodobashiScraper, YODOBASHI_CATEGORIES
-from core.netsea_scraper import NetseaScraper, NETSEA_CATEGORIES
+from core.yodobashi_scraper import YodobashiScraper
+from core.netsea_scraper import NetseaScraper
 from core.amazon_api import AmazonSPAPI
 from core.keepa_api import KeepaAPI
 from core.config_manager import ConfigManager
 from core.history_manager import HistoryManager
 from core.database import ResearchDatabase
 from core.matcher import ProductMatcher
+from core.site_config import (
+    get_category_map,
+    get_default_categories,
+    serialize_site_configs,
+)
+from core.env_security import load_env_file
 
 history = HistoryManager()
 db = ResearchDatabase()
@@ -31,7 +35,7 @@ db = ResearchDatabase()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-load_dotenv()
+load_env_file()
 
 app = FastAPI(title="First Leaf Sedori AI Dashboard Pro")
 
@@ -60,6 +64,15 @@ session_data = {
     "avg_time_per_item": 0,
     "last_reset_time": 0  # リセット時刻の初期値
 }
+
+
+def upsert_session_result(result):
+    """Keep one in-memory row per logical result so UI toggles stay stable."""
+    for idx, existing in enumerate(session_data["results"]):
+        if existing.get("id") == result.get("id"):
+            session_data["results"][idx] = {**existing, **result}
+            return
+    session_data["results"].append(result)
 
 
 class ResearchParams(BaseModel):
@@ -114,16 +127,85 @@ def calculate_roi_and_judgment(buy_box, purchase_price, fba_fee, points_rate=0):
     return profit, margin, roi, judgment
 
 
-# ---------- Category URL maps ----------
-MS_CATEGORIES = {
-    "sale":      "https://www.make-up-solution.com/ec/Facet?inputKeywordFacet=MS%E9%99%90%E5%AE%9A&kclsf=AND",
-    "makeup":    "https://www.make-up-solution.com/ec/Facet?category_0=11050000000",
-    "skincare":  "https://www.make-up-solution.com/ec/Facet?category_0=11020000000",
-    "mask":      "https://www.make-up-solution.com/ec/Facet?category_0=11020600000",
-    "haircare":  "https://www.make-up-solution.com/ec/Facet?category_0=11030000000",
-    "bodycare":  "https://www.make-up-solution.com/ec/Facet?category_0=11040000000",
-    "fragrance": "https://www.make-up-solution.com/ec/Facet?category_0=11060000000",
-}
+def is_unknown_brand(brand_name):
+    value = str(brand_name or "").strip().lower()
+    return value in {"", "不明", "unknown", "—", "-", "netsea"}
+
+
+def has_no_brand_signal(text):
+    value = str(text or "").strip().lower()
+    if not value:
+        return False
+
+    no_brand_signals = {
+        "generic",
+        "generic brand",
+        "ノーブランド",
+        "ノーブランド品",
+        "ノーブランド/輸入品",
+        "no brand",
+    }
+    if value in no_brand_signals:
+        return True
+
+    return any(signal in value for signal in no_brand_signals)
+
+
+def is_unlistable_no_brand(source_brand, amazon_brand, source_title="", amazon_title=""):
+    source_value = str(source_brand or "").strip().lower()
+    amazon_value = str(amazon_brand or "").strip().lower()
+
+    if has_no_brand_signal(source_value) or has_no_brand_signal(amazon_value):
+        return True
+
+    if has_no_brand_signal(source_title) or has_no_brand_signal(amazon_title):
+        return True
+
+    return is_unknown_brand(source_value) and is_unknown_brand(amazon_value)
+
+
+def merge_display_brand(source_brand, amazon_brand):
+    if is_unknown_brand(source_brand) and not is_unknown_brand(amazon_brand):
+        return amazon_brand
+    return source_brand
+
+
+async def recheck_no_brand_results(limit=200):
+    amazon = AmazonSPAPI()
+    updated = 0
+    checked = 0
+
+    for row in db.get_brand_recheck_candidates(limit=limit):
+        asin = row.get("asin")
+        if not asin or asin == "—":
+            continue
+
+        checked += 1
+        summary = await amazon.get_catalog_summary(asin)
+        amazon_brand = summary.get("brand", "不明")
+        amazon_title = summary.get("title", "不明")
+        display_brand = merge_display_brand(row.get("brand", "不明"), amazon_brand)
+
+        updates = {}
+        if display_brand != row.get("brand"):
+            updates["brand"] = display_brand
+
+        if is_unlistable_no_brand(row.get("brand"), amazon_brand, row.get("title", ""), amazon_title):
+            updates["filter_status"] = "filtered"
+            updates["filter_reason"] = "ノーブランド品"
+        elif row.get("filter_reason") == "ノーブランド品":
+            updates["filter_status"] = "visible"
+            updates["filter_reason"] = ""
+
+        if updates:
+            db.update_result_fields(row["id"], updates)
+            for item in session_data["results"]:
+                if item.get("id") == row["id"]:
+                    item.update(updates)
+                    break
+            updated += 1
+
+    return {"checked": checked, "updated": updated}
 
 
 async def run_research_task(params: ResearchParams):
@@ -134,7 +216,7 @@ async def run_research_task(params: ResearchParams):
     session_data["login_status"] = "waiting"
     session_data["current_step"] = 1
     session_data["items_processed"] = 0
-    session_data["total_items"] = params.max_items
+    session_data["total_items"] = 0
     session_data["start_time"] = datetime.now().isoformat()
     session_data["avg_time_per_item"] = 0
     
@@ -165,7 +247,11 @@ async def run_research_task(params: ResearchParams):
         else:
             selected_cats = params.categories if params.categories else [params.category]
             if not selected_cats or selected_cats == [None]:
-                selected_cats = ["makeup"] if params.target_site == "makeup" else ["all"]
+                selected_cats = get_default_categories(params.target_site)
+
+        planned_category_count = max(len(selected_cats), 1)
+        session_data["total_items"] = params.max_items * planned_category_count
+        total_processed = 0
 
         # --- Instantiate scraper ---
         if params.target_site == "yodobashi":
@@ -204,15 +290,8 @@ async def run_research_task(params: ResearchParams):
                 cat_label = "カスタムURL"
             
             if not target_url:
-                if params.target_site == "yodobashi":
-                    cat_data = YODOBASHI_CATEGORIES.get(current_cat, ["不明", ""])
-                    cat_label, target_url = cat_data[0], cat_data[1]
-                elif params.target_site == "netsea":
-                    cat_data = NETSEA_CATEGORIES.get(current_cat, ["不明", ""])
-                    cat_label, target_url = cat_data[0], cat_data[1]
-                else:
-                    target_url = MS_CATEGORIES.get(current_cat, MS_CATEGORIES["makeup"])
-                    cat_label = current_cat
+                cat_data = get_category_map(params.target_site).get(current_cat, ("不明", ""))
+                cat_label, target_url = cat_data[0], cat_data[1]
 
             if not target_url: continue
 
@@ -233,7 +312,6 @@ async def run_research_task(params: ResearchParams):
             # --------------- Scraping loop for this category ---------------
             skip_jans = list(history.history.keys()) if params.skip_history else []
 
-            idx = 0
             async for product in scraper.scrape_products(
                 base_url=target_url,
                 start_page=params.start_page,
@@ -252,11 +330,12 @@ async def run_research_task(params: ResearchParams):
 
                 if product["type"] == "item":
                     try:
-                        idx += 1
+                        total_processed += 1
                         _item_start = time.time()
                         item = product["data"]
                         jan = item.get("jan")
                         asin = None
+                        amz_title = ""
                         sales_rank = "圏外"   # ← Amazon照合失敗時のデフォルト値
                         amz_brand = ""
                         buy_box = 0
@@ -266,8 +345,9 @@ async def run_research_task(params: ResearchParams):
                         seller_count = 0
                         restriction = "確認中"
                         
-                        session_data["progress"] = int((idx / params.max_items) * 100)
-                        session_data["items_processed"] = idx
+                        total_items = max(session_data["total_items"], 1)
+                        session_data["progress"] = min(int((total_processed / total_items) * 100), 100)
+                        session_data["items_processed"] = total_processed
                         session_data["current_step"] = 2
 
                         # ============================================
@@ -281,6 +361,7 @@ async def run_research_task(params: ResearchParams):
                                 # JAN match = high confidence, take the first result
                                 asin = jan_candidates[0]["asin"]
                                 amz_brand = jan_candidates[0]["brand"]
+                                amz_title = jan_candidates[0].get("title", "")
                                 sales_rank = jan_candidates[0].get("sales_rank", "圏外")
                                 log_it(f"🎯 JAN照合成功: {jan} → ASIN {asin}", is_focus_skip=True)
                         
@@ -293,6 +374,7 @@ async def run_research_task(params: ResearchParams):
                             if best_match:
                                 asin = best_match["asin"]
                                 amz_brand = best_match["brand"]
+                                amz_title = best_match.get("title", "")
                                 sales_rank = best_match.get("sales_rank", "圏外")
                                 log_it(f"✅ KeyWord照合: ASIN {asin} ({sales_rank})", is_focus_skip=True)
                             else:
@@ -340,7 +422,9 @@ async def run_research_task(params: ResearchParams):
                         session_data["current_step"] = 3
                         filter_reason = ""
 
-                        if asin and asin != "—" and profit > 0:
+                        no_brand_item = is_unlistable_no_brand(item["brand"], amz_brand, item["title"], amz_title)
+
+                        if asin and asin != "—" and profit > 0 and not no_brand_item:
                             # Only query Keepa for promising items (token-saving!)
                             log_it(f"🔍 Keepa精査中: {asin} (トークン残: {keepa.get_tokens_left()})", is_focus_skip=True)
                             keepa_data = await keepa.get_product_data(asin)
@@ -362,6 +446,8 @@ async def run_research_task(params: ResearchParams):
                             elif profit <= 0:
                                 monthly_sales = "—"
 
+                        display_brand = merge_display_brand(item["brand"], amz_brand)
+
                         # ============================================
                         # STAGE 4: 自動フィルタリング
                         # ============================================
@@ -378,6 +464,10 @@ async def run_research_task(params: ResearchParams):
                             judgment = "⚪️ Amazon不一致"
                             filter_status = "filtered"
                             filter_reason = "Amazon未検出"
+
+                        if no_brand_item:
+                            filter_status = "filtered"
+                            filter_reason = "ノーブランド品"
                         
                         # ROI-based filtering
                         if asin and asin != "—" and roi < 0.10 and profit > 0:
@@ -404,11 +494,10 @@ async def run_research_task(params: ResearchParams):
                             keepa_url = "#"
 
                         res_entry = {
-                            "id": f"{jan or asin or 'unknown'}_{idx}",
                             "jan": jan or "—",
                             "asin": asin or "—",
                             "title": item["title"],
-                            "brand": item["brand"],
+                            "brand": display_brand,
                             "price": item["price"],
                             "amazon_price": buy_box,
                             "amazon_listing_price": amazon_listing_price,
@@ -440,11 +529,11 @@ async def run_research_task(params: ResearchParams):
                             break
 
                         try:
-                            db.save_result(res_entry)
+                            res_entry = db.save_result(res_entry)
                         except Exception as db_err:
                             logger.error(f"DB save error: {db_err}")
                         
-                        session_data["results"].append(res_entry)
+                        upsert_session_result(res_entry)
                         
                         # Track processing time for ETA calculation
                         _item_elapsed = time.time() - _item_start
@@ -454,11 +543,11 @@ async def run_research_task(params: ResearchParams):
                         session_data["avg_time_per_item"] = round(sum(_processing_times) / len(_processing_times), 1)
                         
                         if profit > 0 and "制限" in restriction:
-                            log_it(f"⚠️ 利益品ですが出品制限あり: {item['brand']}")
+                            log_it(f"⚠️ 利益品ですが出品制限あり: {display_brand}")
                         
                         # --- Opportunity Loss Tracking ---
                         if "制限" in restriction and profit > 0:
-                            b = item.get("brand", "その他")
+                            b = display_brand or "その他"
                             session_data["opportunity_loss"][b] = session_data["opportunity_loss"].get(b, 0) + profit
 
                         # Record history
@@ -471,6 +560,9 @@ async def run_research_task(params: ResearchParams):
                         logger.error(f"Error processing item: {e}")
                         log_it(f"⚠️ 商品処理エラー: {str(e)}")
 
+
+        if not session_data["is_running"]:
+            return
 
         # --- Recommendations ---
         # リサーチ開始後にリセットされていたら、アドバイスの上書きを完全に中止する（絶対ゾンビ防止）
@@ -487,6 +579,7 @@ async def run_research_task(params: ResearchParams):
                     "message": f"ブランド「{brand}」の制限を解除すれば、約{int(loss)}円の利益チャンスがあります！",
                 })
 
+        session_data["progress"] = 100
         log_it(f"🎉 全てのリサーチが完了しました。(Keepaトークン残: {keepa.get_tokens_left()})")
 
     except Exception as e:
@@ -558,9 +651,14 @@ async def get_yodobashi_categories():
     """Return Yodobashi categories for the frontend dropdown."""
     return {
         "categories": [
-            {"value": k, "label": v[0]} for k, v in YODOBASHI_CATEGORIES.items()
+            {"value": k, "label": v[0]} for k, v in get_category_map("yodobashi").items()
         ]
     }
+
+
+@app.get("/site-configs")
+async def get_site_configs():
+    return {"sites": serialize_site_configs()}
 
 @app.post("/results/clear")
 async def clear_results():
@@ -568,7 +666,7 @@ async def clear_results():
     session_data["last_reset_time"] = time.time()
     session_data["is_running"] = False # バックグラウンドのリサーチ活動を即座に停止
 
-    # データベースのお掃除（お気に入り以外）
+    # データベースのお掃除（お気に入り・チェック済み以外）
     db.clear_all_results()
     
     # サーバー側の「記憶」をすべて新しい箱に入れ替える（Nuclear Reset）
@@ -600,6 +698,13 @@ async def toggle_checked(res_id: str, update: StatusUpdate):
             res["is_checked"] = 1 if update.status else 0
             break
     return {"status": "success"}
+
+
+@app.post("/results/recheck_no_brand")
+async def recheck_no_brand_endpoint():
+    summary = await recheck_no_brand_results(limit=500)
+    session_data["results"] = db.get_all_results(limit=200)
+    return {"status": "success", **summary}
 
 @app.delete("/results/{res_id}/delete")
 async def delete_result_endpoint(res_id: str):

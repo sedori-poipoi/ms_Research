@@ -4,9 +4,9 @@ import httpx
 import asyncio
 import logging
 from datetime import datetime, timedelta
-from dotenv import load_dotenv
+from core.env_security import load_env_file
 
-load_dotenv()
+load_env_file()
 
 logger = logging.getLogger(__name__)
 
@@ -211,6 +211,31 @@ class AmazonSPAPI:
             "seller_count": seller_count
         }
 
+    async def get_catalog_summary(self, asin):
+        """Fetch a lightweight catalog summary for a single ASIN."""
+        if not asin or asin == "—":
+            return {}
+
+        endpoint = f"{SP_API_URL}/catalog/2022-04-01/items/{asin}"
+        params = {
+            "marketplaceIds": self.marketplace_id,
+            "includedData": "summaries",
+        }
+        res_data = await self._request_with_retry("GET", endpoint, params=params)
+        if not res_data:
+            return {}
+
+        summaries = res_data.get("summaries", [])
+        if not summaries:
+            return {}
+
+        summary = summaries[0]
+        return {
+            "asin": asin,
+            "brand": summary.get("brand", "不明"),
+            "title": summary.get("itemName", "不明"),
+        }
+
     async def get_lowest_priced_offers_for_asin(self, asin):
         """Fallback: gets price from lowest priced offers (useful for backordered items)."""
         endpoint = f"{SP_API_URL}/products/pricing/v0/items/{asin}/offers"
@@ -339,4 +364,3 @@ class AmazonSPAPI:
         except Exception as e:
             logger.error(f"Listing restrictions check failed for {asin}: {e}")
         return result
-

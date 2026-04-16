@@ -5,12 +5,12 @@ import re
 from urllib.parse import urlparse, parse_qs, urlunparse, urlencode
 from typing import AsyncGenerator
 from playwright.async_api import async_playwright
-from dotenv import load_dotenv
+from core.env_security import load_env_file
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-load_dotenv()
+load_env_file()
 
 MS_EMAIL = os.environ.get("MS_EMAIL")
 MS_PASSWORD = os.environ.get("MS_PASSWORD")
@@ -61,6 +61,10 @@ class MakeUpSolutionScraper:
 
     async def login(self):
         try:
+            if not MS_EMAIL or not MS_PASSWORD:
+                logger.warning("MS credentials are not configured. Proceeding as guest.")
+                return "guest"
+
             # 1. トップページを開く
             logger.info("Accessing top page for login check...")
             await self.page.goto("https://www.make-up-solution.com/ec/cmShopTopPage1.html", wait_until="domcontentloaded", timeout=30000)
@@ -69,7 +73,7 @@ class MakeUpSolutionScraper:
             # 2. すでにログイン済みか確認
             if await self.page.locator('a:has-text("ログアウト"), a:has-text("マイページ")').count() > 0:
                 logger.info("Already logged in.")
-                return True
+                return "success"
 
             # 3. ログインボタンを探してクリック
             login_btn = self.page.locator('a:has-text("ログイン")').first

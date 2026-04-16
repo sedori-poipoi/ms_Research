@@ -5,14 +5,15 @@ Keepa API Integration Module
 - Provides: monthly sales (drops), price stability, seller trends
 """
 import os
+import asyncio
 import time
 import httpx
 import json
 import logging
 from datetime import datetime, timedelta
-from dotenv import load_dotenv
+from core.env_security import load_env_file
 
-load_dotenv()
+load_env_file()
 logger = logging.getLogger(__name__)
 
 KEEPA_API_URL = "https://api.keepa.com"
@@ -73,13 +74,13 @@ class KeepaAPI:
         self._save_cache()
     
     # ---- Token Management ----
-    def _wait_for_token(self):
+    async def _wait_for_token(self):
         """Ensure we have tokens available. Wait if necessary."""
         if self.tokens_left <= 5:
             wait_secs = max(0, 60 - (time.time() - self.last_request_time))
             if wait_secs > 0:
                 logger.info(f"Keepa token low ({self.tokens_left}). Waiting {int(wait_secs)}s for recovery...")
-                time.sleep(wait_secs)
+                await asyncio.sleep(wait_secs)
     
     # ---- API Request ----
     async def _request(self, endpoint, params):
@@ -88,7 +89,7 @@ class KeepaAPI:
             logger.warning("KEEPA_API_KEY not set. Skipping Keepa request.")
             return None
         
-        self._wait_for_token()
+        await self._wait_for_token()
         
         params["key"] = self.api_key
         url = f"{KEEPA_API_URL}/{endpoint}"

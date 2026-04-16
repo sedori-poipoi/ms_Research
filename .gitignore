@@ -1,4 +1,7 @@
 .env
+.env.*
+!.env.example
+data/keepa_cache.json
 core/__pycache__/
 __pycache__/
 *.log

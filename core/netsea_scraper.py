@@ -6,23 +6,13 @@ import random
 from urllib.parse import urlparse, parse_qs, urlunparse, urlencode
 from typing import AsyncGenerator
 from playwright.async_api import async_playwright
-from dotenv import load_dotenv
+from core.site_config import NETSEA_CATEGORIES
+from core.env_security import load_env_file
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-load_dotenv()
-
-NETSEA_CATEGORIES = {
-    "sale":      ("ゲリラセール",     "https://www.netsea.jp/special/guerrilla"),
-    "makeup":    ("メイク・コスメ",   "https://www.netsea.jp/search/?category_id=302"),
-    "skincare":  ("スキンケア",       "https://www.netsea.jp/search/?category_id=313"),
-    "haircare":  ("ヘアケア",         "https://www.netsea.jp/search/?category_id=315"),
-    "health":    ("衛生日用品",       "https://www.netsea.jp/search/?category_id=305"),
-    "food":      ("食品",             "https://www.netsea.jp/search/?category_id=8"),
-    "drink":     ("飲料",             "https://www.netsea.jp/search/?category_id=804"),
-    "daily":     ("日用品",           "https://www.netsea.jp/search/?category_id=2"),
-}
+load_env_file()
 
 class NetseaScraper:
     def __init__(self, headless=False):
@@ -31,6 +21,7 @@ class NetseaScraper:
         self.browser = None
         self.context = None
         self.page = None
+        self.is_guest_mode = True
 
     async def _safe_wait(self, min_sec=2, max_sec=5):
         """AI検知を避けるためのランダムな待機時間"""
@@ -73,6 +64,7 @@ class NetseaScraper:
 
         if not netsea_id or not netsea_pwd:
             logger.warning("[NETSEA] ログイン情報が設定されていません")
+            self.is_guest_mode = True
             return "guest"
 
         logger.info("[NETSEA] ログイン処理を開始します")
@@ -92,9 +84,11 @@ class NetseaScraper:
             await self._safe_wait(3, 5)
 
             logger.info("[NETSEA] ログイン完了")
+            self.is_guest_mode = False
             return "success"
         except Exception as e:
             logger.error(f"[NETSEA] ログイン中にエラー: {e}")
+            self.is_guest_mode = True
             return "guest"
 
     async def scrape_products(
@@ -158,6 +152,8 @@ class NetseaScraper:
                 continue
                 
             yield {"type": "log", "msg": f"👀 ページ内に約{len(item_els)}件のアイテムを発見。"}
+            page_yield_count = 0
+            hidden_price_count = 0
 
             for i in range(len(item_els)):
                 if count >= max_items:
@@ -204,6 +200,10 @@ class NetseaScraper:
                     m = re.search(r"([0-9,]+)\s*(円|/点|\(税抜\))", txt)
                     if m:
                         price = int(m.group(1).replace(",", ""))
+
+                if price <= 0 and ("卸価格を表示" in txt or "卸価格を表示" in html):
+                    hidden_price_count += 1
+                    continue
                 
                 # Title抽出
                 title = "商品"
@@ -223,15 +223,23 @@ class NetseaScraper:
                             if lines:
                                 title = lines[0][:40]
 
+                brand = "不明"
+                brand_match = re.search(r"class=\"brandName\"[^>]*>(.*?)<", html, re.IGNORECASE)
+                if brand_match:
+                    candidate_brand = re.sub(r"<[^>]+>", "", brand_match.group(1)).strip()
+                    if candidate_brand:
+                        brand = candidate_brand
+
                 if price > 0:
                     count += 1
+                    page_yield_count += 1
                     yield {
                         "type": "item",
                         "data": {
                             "id": jan or f"netsea_{count}",
                             "jan": jan,
                             "title": title,
-                            "brand": "NETSEA",
+                            "brand": brand,
                             "price": price,
                             "ms_url": url,
                             "page": page_num,
@@ -240,6 +248,18 @@ class NetseaScraper:
                         },
                     }
                     await self._safe_wait(0.5, 1.5)
+
+            if page_yield_count == 0 and hidden_price_count > 0:
+                if self.is_guest_mode:
+                    yield {
+                        "type": "log",
+                        "msg": "ℹ️ NETSEA はゲスト状態だと卸価格が表示されず、商品を取得できないことがあります。NETSEA 会員ログイン設定を入れると改善します。",
+                    }
+                else:
+                    yield {
+                        "type": "log",
+                        "msg": "ℹ️ NETSEA 一覧で価格を取得できない商品が多く、今回は結果が 0 件でした。selector か表示条件の確認が必要です。",
+                    }
 
     async def get_stats(self, url):
         try:

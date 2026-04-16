@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>First Leaf Sedori AI Dashboard</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260415-v3">
+    <link rel="stylesheet" href="/static/styles.css?v=20260416-v1">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -164,23 +164,43 @@
 
                 <!-- Results Table -->
                 <div class="card">
-                    <div class="results-header">
+                    <div class="results-header" style="display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 0.8rem;">
                         <div class="header-left">
-                            <div class="card-title" style="margin-bottom: 0; font-size: 1rem;">
+                            <div class="card-title" style="margin-bottom: 0; font-size: 1rem; display: flex; align-items: center; gap: 0.8rem; flex-wrap: nowrap;">
                                 ✨ リサーチ結果
                                 <span id="resCount" class="count-badge">0件</span>
-                                <span id="filteredCount" style="font-size: 0.72rem; color: #999; margin-left: 0.3rem;"></span>
-                                <span id="keepaTokens" style="font-size: 0.68rem; color: var(--accent); margin-left: 0.8rem; font-weight: 500;">Keepa: 60トークン</span>
+                                <span id="filteredCount" style="font-size: 0.72rem; color: #999;"></span>
+                                <input type="text" id="tableSearch" placeholder="🔍 キーワード..." onkeyup="filterResults()" style="width: 320px;">
                             </div>
                         </div>
-                        <div class="header-filters">
-                            <input type="text" id="tableSearch" placeholder="🔍 キーワード..." onkeyup="filterResults()">
-                            <select id="profitFilter" onchange="filterResults()">
+                        <div class="header-filters" style="display: flex; flex-wrap: nowrap; align-items: center; justify-content: flex-end; gap: 0.5rem; min-width: 0; overflow-x: auto; overflow-y: hidden;">
+                            <label class="inline-check-label" style="display: inline-flex !important; align-items: center; gap: 0.4rem; white-space: nowrap; margin: 0 !important; padding: 0 !important;">
+                                <input type="checkbox" id="pinFavoritesToggle" checked onchange="filterResults()">
+                                <span>⭐ お気に入りを上に固定</span>
+                            </label>
+                            <select id="resultModeFilter" onchange="filterResults()" style="width: 138px;">
+                                <option value="all">全件</option>
+                                <option value="favorites">⭐ お気に入りだけ</option>
+                                <option value="checked">✅ チェック済みだけ</option>
+                            </select>
+                            <select id="sortMode" onchange="filterResults()" style="width: 138px;">
+                                <option value="newest">新しい順</option>
+                                <option value="profit_desc">利益が高い順</option>
+                                <option value="roi_desc">ROIが高い順</option>
+                                <option value="price_asc">仕入れが安い順</option>
+                            </select>
+                            <select id="profitFilter" onchange="filterResults()" style="width: 128px;">
                                 <option value="-999999" selected>全て表示</option>
                                 <option value="0">利益品のみ</option>
                                 <option value="500">500円以上</option>
                                 <option value="1000">1000円以上</option>
                                 <option value="2000">2000円以上</option>
+                            </select>
+                            <select id="restrictionFilter" onchange="filterResults()" style="width: 152px;">
+                                <option value="all">制限すべて</option>
+                                <option value="eligible">出品可能</option>
+                                <option value="approval">申請への入口</option>
+                                <option value="not_eligible">現在は解除不可</option>
                             </select>
                             <button id="toggleFilteredBtn" class="btn-filter-toggle" onclick="toggleFilteredItems()">
                                 🔼 除外商品も表示
@@ -258,7 +278,7 @@
     <div id="confirmModal" class="modal-overlay">
         <div class="modal-content">
             <div style="font-size: 1.5rem; margin-bottom: 1rem;">📋 確認</div>
-            <p style="margin-bottom: 1.5rem; color: #555;">結果をすべてクリアしますか？<br><small style="color: #888;">※お気に入りにした商品は残ります。</small></p>
+            <p style="margin-bottom: 1.5rem; color: #555;">結果をすべてクリアしますか？<br><small style="color: #888;">※お気に入り・チェック済みの商品は残ります。</small></p>
             <div style="display: flex; gap: 1rem; justify-content: flex-end;">
                 <button class="tab-btn" onclick="closeConfirmModal()">キャンセル</button>
                 <button class="btn-primary" style="background: #c62828;" onclick="executeClearResults()">クリア実行</button>
