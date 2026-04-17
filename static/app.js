@@ -122,6 +122,33 @@ function updateCategories() {
             <input type="checkbox" name="category" value="${c.value}" ${defaultCategories.has(c.value) ? 'checked' : ''}>
             <span>${c.label}</span>
         </label>`).join('');
+
+    updateResearchScopeControls();
+}
+
+function updateResearchScopeControls() {
+    const autoPageMode = document.getElementById('autoPageMode');
+    const fullCategoryMode = document.getElementById('fullCategoryMode');
+    const startPage = document.getElementById('startPage');
+    const endPage = document.getElementById('endPage');
+    const maxItems = document.getElementById('maxItems');
+
+    if (!autoPageMode || !fullCategoryMode || !startPage || !endPage || !maxItems) return;
+
+    if (fullCategoryMode.checked) {
+        autoPageMode.checked = true;
+    }
+
+    autoPageMode.disabled = fullCategoryMode.checked;
+    startPage.disabled = autoPageMode.checked;
+    endPage.disabled = autoPageMode.checked;
+    maxItems.disabled = fullCategoryMode.checked;
+
+    if (fullCategoryMode.checked) {
+        maxItems.title = 'カテゴリ全件モードでは取得上限を使いません';
+    } else {
+        maxItems.title = '';
+    }
 }
 
 // --- Start Research ---
@@ -132,6 +159,8 @@ async function startResearch() {
     const startPage = document.getElementById('startPage').value;
     const endPage = document.getElementById('endPage').value;
     const sortOrder = document.getElementById('sortOrder').value;
+    const autoPageMode = document.getElementById('autoPageMode').checked;
+    const fullCategoryMode = document.getElementById('fullCategoryMode').checked;
     const focusMode = document.getElementById('focusMode').checked;
     const skipHistory = document.getElementById('skipHistory').checked;
     const monitorMode = document.getElementById('monitorMode').checked;
@@ -156,10 +185,12 @@ async function startResearch() {
             target_site: targetSite,
             categories: categories, 
             custom_url: customUrl || null,
-            max_items: parseInt(maxItems), 
-            start_page: parseInt(startPage),
-            end_page: parseInt(endPage),
+            max_items: parseInt(maxItems || '50', 10),
+            start_page: parseInt(startPage || '1', 10),
+            end_page: parseInt(endPage || '1', 10),
             sort_order: sortOrder,
+            auto_page_mode: autoPageMode,
+            full_category_mode: fullCategoryMode,
             focus_mode: focusMode,
             skip_history: skipHistory,
             monitor_mode: monitorMode
@@ -607,6 +638,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     fetchBrands();
     await loadSiteConfigs();
     updateCategories();
+    updateResearchScopeControls();
     
     const resetBtn = document.getElementById('resetBtn');
     if (resetBtn) {

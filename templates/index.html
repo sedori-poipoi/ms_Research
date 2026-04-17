@@ -48,6 +48,7 @@
                                 <option value="makeup">メイクアップソリューション</option>
                                 <option value="yodobashi">ヨドバシ.com</option>
                                 <option value="netsea">NETSEA (ネッシー)</option>
+                                <option value="kaunet">カウネット</option>
                             </select>
                         </div>
                         <div class="form-group" style="flex: 1; min-width: 200px;">
@@ -70,14 +71,28 @@
                             <label>終了PG</label>
                             <input type="number" id="endPage" value="1" min="1">
                         </div>
-                        <div class="form-group" style="width: 70px;">
-                            <label>巡回件数</label>
-                            <input type="number" id="maxItems" value="50" min="1" max="500">
+                        <div class="form-group" style="width: 90px;">
+                            <label>取得上限</label>
+                            <input type="number" id="maxItems" value="50" min="1" max="5000">
                         </div>
 
                         <div class="form-group">
                             <label>設定</label>
                             <div class="toggles-group">
+                                <label class="switch-compact" title="取得上限から必要ページ数を自動で計算します">
+                                    <span>自動PG</span>
+                                    <div class="switch">
+                                        <input type="checkbox" id="autoPageMode" checked onchange="updateResearchScopeControls()">
+                                        <span class="slider"></span>
+                                    </div>
+                                </label>
+                                <label class="switch-compact" title="カテゴリ内を最後まで低速巡回します">
+                                    <span>カテゴリ全件</span>
+                                    <div class="switch">
+                                        <input type="checkbox" id="fullCategoryMode" onchange="updateResearchScopeControls()">
+                                        <span class="slider"></span>
+                                    </div>
+                                </label>
                                 <label class="switch-compact">
                                     <span>即戦力</span>
                                     <div class="switch">

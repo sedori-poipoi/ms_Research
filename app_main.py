@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from core.scraper import MakeUpSolutionScraper
 from core.yodobashi_scraper import YodobashiScraper
 from core.netsea_scraper import NetseaScraper
+from core.kaunet_scraper import KaunetScraper
 from core.amazon_api import AmazonSPAPI
 from core.keepa_api import KeepaAPI
 from core.config_manager import ConfigManager
@@ -76,13 +77,15 @@ def upsert_session_result(result):
 
 
 class ResearchParams(BaseModel):
-    target_site: str = "makeup"  # "makeup" or "yodobashi"
+    target_site: str = "makeup"  # "makeup" / "yodobashi" / "netsea" / "kaunet"
     category: Optional[str] = None # For compatibility
     categories: List[str] = []
     max_items: int = 20
     start_page: int = 1
     end_page: int = 1
     sort_order: str = "disp_from_datetime"
+    auto_page_mode: bool = True
+    full_category_mode: bool = False
     focus_mode: bool = False
     skip_history: bool = True
     monitor_mode: bool = False
@@ -250,7 +253,9 @@ async def run_research_task(params: ResearchParams):
                 selected_cats = get_default_categories(params.target_site)
 
         planned_category_count = max(len(selected_cats), 1)
-        session_data["total_items"] = params.max_items * planned_category_count
+        estimated_total_items = 0
+        total_items_known = True
+        session_data["total_items"] = 0
         total_processed = 0
 
         # --- Instantiate scraper ---
@@ -262,6 +267,10 @@ async def run_research_task(params: ResearchParams):
             from core.netsea_scraper import NetseaScraper
             scraper = NetseaScraper(headless=not params.monitor_mode)
             log_it("🚀 NETSEA リサーチ開始")
+        elif params.target_site == "kaunet":
+            from core.kaunet_scraper import KaunetScraper
+            scraper = KaunetScraper(headless=not params.monitor_mode)
+            log_it("🚀 カウネット リサーチ開始")
         else:
             from core.scraper import MakeUpSolutionScraper
             scraper = MakeUpSolutionScraper(headless=not params.monitor_mode)
@@ -299,27 +308,76 @@ async def run_research_task(params: ResearchParams):
             log_it(f"📂 カテゴリー [{cat_label}] のリサーチを開始します")
 
             # --- Pre-search Stats Peek ---
+            stats = None
+            total = 0
+            items_per_page = 50
+            effective_start_page = max(params.start_page, 1)
+            effective_end_page = max(params.end_page, effective_start_page)
+            effective_max_items = max(params.max_items, 1)
+            estimated_category_items = effective_max_items
+
             try:
                 stats = await scraper.get_stats(target_url)
                 if stats and stats.get("total_items") is not None:
-                    total = stats["total_items"]
-                    items_per_page = stats.get("items_per_page", 50)
-                    planned_pages = (params.max_items + items_per_page - 1) // items_per_page
-                    log_it(f"📊 [{cat_label}] 全 {total} 件を確認。最大 {params.max_items} 件（約 {planned_pages} ページ）を調査予定です。")
+                    total = max(int(stats.get("total_items") or 0), 0)
+                    items_per_page = max(int(stats.get("items_per_page") or 0), 1)
             except Exception as e:
                 logger.warning(f"Stats peek failed: {e}")
 
+            if params.full_category_mode:
+                effective_start_page = 1
+                if total > 0:
+                    effective_end_page = max(1, (total + items_per_page - 1) // items_per_page)
+                    effective_max_items = total
+                    estimated_category_items = total
+                    log_it(f"📊 [{cat_label}] 全 {total} 件を確認。カテゴリ全件モードで最後まで巡回します。")
+                elif params.target_site == "kaunet":
+                    effective_end_page = 1
+                    effective_max_items = 1_000_000
+                    estimated_category_items = 0
+                    log_it(f"📊 [{cat_label}] カテゴリ全件モードで下位カテゴリまで順に巡回します。件数は巡回しながら確認します。")
+                else:
+                    estimated_category_items = 0
+                    total_items_known = False
+                    log_it(f"ℹ️ [{cat_label}] 全件数を事前取得できないため、今回は手動ページ範囲で進めます。")
+            elif params.auto_page_mode:
+                effective_start_page = 1
+                estimated_category_items = effective_max_items
+                planned_pages = max(1, (effective_max_items + items_per_page - 1) // items_per_page)
+                effective_end_page = planned_pages
+                if total > 0:
+                    estimated_category_items = min(total, effective_max_items)
+                    effective_end_page = max(1, (estimated_category_items + items_per_page - 1) // items_per_page)
+                    log_it(f"📊 [{cat_label}] 全 {total} 件を確認。上限 {estimated_category_items} 件ぶんを自動で約 {effective_end_page} ページ巡回します。")
+                else:
+                    log_it(f"📊 [{cat_label}] 取得上限 {effective_max_items} 件ぶんを自動で約 {effective_end_page} ページ巡回します。")
+            else:
+                if total > 0:
+                    planned_pages = max(effective_end_page - effective_start_page + 1, 1)
+                    estimated_category_items = min(total, effective_max_items)
+                    log_it(f"📊 [{cat_label}] 全 {total} 件を確認。手動指定の {planned_pages} ページを巡回します。")
+
+            if total_items_known and estimated_category_items > 0:
+                estimated_total_items += estimated_category_items
+                session_data["total_items"] = estimated_total_items
+            elif params.full_category_mode and estimated_category_items == 0:
+                total_items_known = False
+                session_data["total_items"] = 0
+
             # --------------- Scraping loop for this category ---------------
             skip_jans = list(history.history.keys()) if params.skip_history else []
+            scrape_kwargs = {
+                "base_url": target_url,
+                "start_page": effective_start_page,
+                "end_page": effective_end_page,
+                "sort_order": params.sort_order,
+                "max_items": effective_max_items,
+                "skip_jans": skip_jans,
+            }
+            if params.target_site == "kaunet":
+                scrape_kwargs["full_category_mode"] = params.full_category_mode
 
-            async for product in scraper.scrape_products(
-                base_url=target_url,
-                start_page=params.start_page,
-                end_page=params.end_page,
-                sort_order=params.sort_order,
-                max_items=params.max_items,
-                skip_jans=skip_jans
-            ):
+            async for product in scraper.scrape_products(**scrape_kwargs):
                 if not session_data["is_running"]:
                     log_it("⏹ リサーチが手動停止されました。")
                     break
@@ -345,8 +403,11 @@ async def run_research_task(params: ResearchParams):
                         seller_count = 0
                         restriction = "確認中"
                         
-                        total_items = max(session_data["total_items"], 1)
-                        session_data["progress"] = min(int((total_processed / total_items) * 100), 100)
+                        if session_data["total_items"] > 0:
+                            total_items = max(session_data["total_items"], 1)
+                            session_data["progress"] = min(int((total_processed / total_items) * 100), 100)
+                        else:
+                            session_data["progress"] = 0
                         session_data["items_processed"] = total_processed
                         session_data["current_step"] = 2
 
@@ -716,4 +777,5 @@ async def delete_result_endpoint(res_id: str):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    port = int(os.getenv("APP_PORT", "8001"))
+    uvicorn.run(app, host="0.0.0.0", port=port)

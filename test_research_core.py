@@ -9,6 +9,7 @@ import app_main
 from core.database import ResearchDatabase
 from core.keepa_api import KeepaAPI
 from core.site_config import SITE_CONFIGS, get_default_categories, serialize_site_configs
+from core.kaunet_scraper import KaunetScraper
 from core.yodobashi_scraper import YodobashiScraper
 
 
@@ -51,6 +52,25 @@ class SiteConfigTests(unittest.TestCase):
         ]
         self.assertEqual(list(SITE_CONFIGS["netsea"]["categories"].keys()), expected_order)
 
+    def test_kaunet_defaults_focus_on_low_risk_public_categories(self):
+        kaunet_categories = SITE_CONFIGS["kaunet"]["categories"]
+        expected_order = [
+            "daily_life",
+            "drink_food_gift",
+            "stationery",
+            "files",
+            "paper_toner_ink",
+            "pc_printer_media",
+            "electronics_office",
+            "packing_store",
+            "medical_care_lab",
+            "tools_parts",
+        ]
+        self.assertEqual(SITE_CONFIGS["kaunet"]["default_categories"], ["stationery"])
+        self.assertEqual(list(kaunet_categories.keys()), expected_order)
+        self.assertEqual(kaunet_categories["daily_life"][0], "日用品・生活雑貨")
+        self.assertEqual(kaunet_categories["stationery"][0], "文房具・事務用品")
+
 
 class KeepaApiTests(unittest.IsolatedAsyncioTestCase):
     async def test_wait_for_token_uses_async_sleep(self):
@@ -91,7 +111,196 @@ class YodobashiScraperTests(unittest.TestCase):
         )
 
 
+class KaunetScraperTests(unittest.TestCase):
+    def test_build_listing_url_updates_path_page_segment(self):
+        scraper = KaunetScraper(headless=True)
+        url = scraper._build_listing_url(
+            "https://www.kaunet.com/rakuraku/category/0/1/001/001004/",
+            page_num=3,
+        )
+        self.assertEqual(
+            url,
+            "https://www.kaunet.com/rakuraku/category/0/3/001/001004/",
+        )
+
+    def test_build_listing_url_leaves_goods_page_unchanged(self):
+        scraper = KaunetScraper(headless=True)
+        goods_url = "https://www.kaunet.com/kaunet/goods/36783137/"
+        self.assertEqual(scraper._build_listing_url(goods_url, page_num=2), goods_url)
+
+
 class ResearchProgressTests(unittest.IsolatedAsyncioTestCase):
+    async def test_auto_page_mode_expands_page_count_from_items_per_page(self):
+        class FakeAmazon:
+            async def search_by_jan(self, jan):
+                return []
+
+            async def search_by_keyword(self, query, brand):
+                return []
+
+            async def get_competitive_pricing(self, asin):
+                return {"price": 0, "listing_price": 0, "shipping": 0, "seller_count": 0}
+
+            async def get_fees_estimate(self, asin, buy_box):
+                return 0
+
+            async def get_listing_restrictions(self, asin):
+                return {"status": "出品可能", "reason_code": "", "approval_url": ""}
+
+        class FakeKeepa:
+            def get_tokens_left(self):
+                return 60
+
+            async def get_product_data(self, asin):
+                return {}
+
+        class FakeScraper:
+            instances = []
+
+            def __init__(self, headless=False):
+                self.calls = []
+                type(self).instances.append(self)
+
+            async def start(self):
+                return None
+
+            async def login(self):
+                return "guest"
+
+            async def get_stats(self, url):
+                return {"total_items": 120, "items_per_page": 40}
+
+            async def scrape_products(self, base_url, start_page, end_page, sort_order, max_items, skip_jans=None):
+                self.calls.append({
+                    "start_page": start_page,
+                    "end_page": end_page,
+                    "max_items": max_items,
+                })
+                if False:
+                    yield None
+
+            async def stop(self):
+                return None
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original_db = app_main.db
+            original_session = dict(app_main.session_data)
+            app_main.db = ResearchDatabase(str(Path(tmpdir) / "history.db"))
+            app_main.session_data["results"] = []
+            app_main.session_data["logs"] = []
+            app_main.session_data["recommendations"] = []
+            app_main.session_data["last_reset_time"] = 0
+            FakeScraper.instances = []
+
+            params = app_main.ResearchParams(
+                target_site="makeup",
+                categories=["makeup"],
+                max_items=65,
+                auto_page_mode=True,
+                start_page=1,
+                end_page=9,
+            )
+
+            try:
+                with patch("app_main.AmazonSPAPI", FakeAmazon), \
+                     patch("app_main.KeepaAPI", FakeKeepa), \
+                     patch("core.scraper.MakeUpSolutionScraper", FakeScraper):
+                    await app_main.run_research_task(params)
+
+                self.assertEqual(len(FakeScraper.instances), 1)
+                self.assertEqual(FakeScraper.instances[0].calls[0]["start_page"], 1)
+                self.assertEqual(FakeScraper.instances[0].calls[0]["end_page"], 2)
+                self.assertEqual(FakeScraper.instances[0].calls[0]["max_items"], 65)
+            finally:
+                app_main.db = original_db
+                app_main.session_data.clear()
+                app_main.session_data.update(original_session)
+
+    async def test_full_category_mode_uses_total_item_count(self):
+        class FakeAmazon:
+            async def search_by_jan(self, jan):
+                return []
+
+            async def search_by_keyword(self, query, brand):
+                return []
+
+            async def get_competitive_pricing(self, asin):
+                return {"price": 0, "listing_price": 0, "shipping": 0, "seller_count": 0}
+
+            async def get_fees_estimate(self, asin, buy_box):
+                return 0
+
+            async def get_listing_restrictions(self, asin):
+                return {"status": "出品可能", "reason_code": "", "approval_url": ""}
+
+        class FakeKeepa:
+            def get_tokens_left(self):
+                return 60
+
+            async def get_product_data(self, asin):
+                return {}
+
+        class FakeScraper:
+            instances = []
+
+            def __init__(self, headless=False):
+                self.calls = []
+                type(self).instances.append(self)
+
+            async def start(self):
+                return None
+
+            async def login(self):
+                return "guest"
+
+            async def get_stats(self, url):
+                return {"total_items": 120, "items_per_page": 40}
+
+            async def scrape_products(self, base_url, start_page, end_page, sort_order, max_items, skip_jans=None):
+                self.calls.append({
+                    "start_page": start_page,
+                    "end_page": end_page,
+                    "max_items": max_items,
+                })
+                if False:
+                    yield None
+
+            async def stop(self):
+                return None
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original_db = app_main.db
+            original_session = dict(app_main.session_data)
+            app_main.db = ResearchDatabase(str(Path(tmpdir) / "history.db"))
+            app_main.session_data["results"] = []
+            app_main.session_data["logs"] = []
+            app_main.session_data["recommendations"] = []
+            app_main.session_data["last_reset_time"] = 0
+            FakeScraper.instances = []
+
+            params = app_main.ResearchParams(
+                target_site="makeup",
+                categories=["makeup"],
+                max_items=25,
+                auto_page_mode=True,
+                full_category_mode=True,
+            )
+
+            try:
+                with patch("app_main.AmazonSPAPI", FakeAmazon), \
+                     patch("app_main.KeepaAPI", FakeKeepa), \
+                     patch("core.scraper.MakeUpSolutionScraper", FakeScraper):
+                    await app_main.run_research_task(params)
+
+                self.assertEqual(len(FakeScraper.instances), 1)
+                self.assertEqual(FakeScraper.instances[0].calls[0]["start_page"], 1)
+                self.assertEqual(FakeScraper.instances[0].calls[0]["end_page"], 3)
+                self.assertEqual(FakeScraper.instances[0].calls[0]["max_items"], 120)
+            finally:
+                app_main.db = original_db
+                app_main.session_data.clear()
+                app_main.session_data.update(original_session)
+
     async def test_multi_category_progress_counts_total_processed_items(self):
         class FakeAmazon:
             async def search_by_jan(self, jan):
@@ -490,6 +699,115 @@ class ResearchProgressTests(unittest.IsolatedAsyncioTestCase):
                 result = app_main.session_data["results"][0]
                 self.assertEqual(result["filter_status"], "filtered")
                 self.assertEqual(result["filter_reason"], "ノーブランド品")
+            finally:
+                app_main.db = original_db
+                app_main.history = original_history
+                app_main.session_data.clear()
+                app_main.session_data.update(original_session)
+
+    async def test_kaunet_research_uses_monitor_mode_for_visible_browser(self):
+        class FakeAmazon:
+            async def search_by_jan(self, jan):
+                return [{"asin": "B000000003", "brand": "カウネット", "sales_rank": "1位"}]
+
+            async def search_by_keyword(self, query, brand):
+                return []
+
+            async def get_competitive_pricing(self, asin):
+                return {"price": 2200, "listing_price": 2200, "shipping": 0, "seller_count": 1}
+
+            async def get_fees_estimate(self, asin, buy_box):
+                return 500
+
+            async def get_listing_restrictions(self, asin):
+                return {"status": "出品可能", "reason_code": "", "approval_url": ""}
+
+        class FakeKeepa:
+            def get_tokens_left(self):
+                return 60
+
+            async def get_product_data(self, asin):
+                return {
+                    "source": "keepa",
+                    "monthly_sales": "普通 (5回/月)",
+                    "drops_30": 5,
+                    "price_stability": "安定",
+                    "new_offer_count": 2,
+                }
+
+        class FakeKaunetScraper:
+            instances = []
+
+            def __init__(self, headless=False):
+                self.headless = headless
+                type(self).instances.append(self)
+
+            async def start(self):
+                return None
+
+            async def login(self):
+                return "guest"
+
+            async def get_stats(self, url):
+                return {"total_items": 1, "items_per_page": 1}
+
+            async def scrape_products(self, base_url, start_page, end_page, sort_order, max_items, skip_jans=None, full_category_mode=False):
+                yield {
+                    "type": "item",
+                    "data": {
+                        "id": "4900000000003",
+                        "jan": "4900000000003",
+                        "title": "カウネット商品",
+                        "brand": "カウネット",
+                        "price": 1000,
+                        "ms_url": "https://www.kaunet.com/kaunet/goods/36783137/",
+                        "page": 1,
+                        "index": 1,
+                        "points_rate": 0,
+                        "in_stock": 1,
+                    },
+                }
+
+            async def stop(self):
+                return None
+
+        class FakeHistory:
+            def __init__(self):
+                self.history = {}
+
+            def add_to_history(self, jan):
+                self.history[jan] = True
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original_db = app_main.db
+            original_history = app_main.history
+            original_session = dict(app_main.session_data)
+            app_main.db = ResearchDatabase(str(Path(tmpdir) / "history.db"))
+            app_main.history = FakeHistory()
+            app_main.session_data["results"] = []
+            app_main.session_data["logs"] = []
+            app_main.session_data["recommendations"] = []
+            app_main.session_data["last_reset_time"] = 0
+            FakeKaunetScraper.instances = []
+
+            params = app_main.ResearchParams(
+                target_site="kaunet",
+                categories=["stationery"],
+                max_items=1,
+                start_page=1,
+                end_page=1,
+                monitor_mode=True,
+            )
+
+            try:
+                with patch("app_main.AmazonSPAPI", FakeAmazon), \
+                     patch("app_main.KeepaAPI", FakeKeepa), \
+                     patch("core.kaunet_scraper.KaunetScraper", FakeKaunetScraper):
+                    await app_main.run_research_task(params)
+
+                self.assertEqual(len(FakeKaunetScraper.instances), 1)
+                self.assertFalse(FakeKaunetScraper.instances[0].headless)
+                self.assertEqual(app_main.session_data["results"][0]["brand"], "カウネット")
             finally:
                 app_main.db = original_db
                 app_main.history = original_history

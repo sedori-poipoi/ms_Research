@@ -38,6 +38,19 @@ NETSEA_CATEGORIES = {
     "aroma": ("ヒーリング・アロマグッズ", "https://www.netsea.jp/search/?category_id=318"),
 }
 
+KAUNET_CATEGORIES = {
+    "daily_life": ("日用品・生活雑貨", "https://www.kaunet.com/rakuraku/category/0/1/004/"),
+    "drink_food_gift": ("ドリンク・フード・ギフト", "https://www.kaunet.com/rakuraku/category/0/1/022/"),
+    "stationery": ("文房具・事務用品", "https://www.kaunet.com/rakuraku/category/0/1/001/"),
+    "files": ("ファイル", "https://www.kaunet.com/rakuraku/category/0/1/016/"),
+    "paper_toner_ink": ("コピー用紙・トナー・インク", "https://www.kaunet.com/rakuraku/category/0/1/002/"),
+    "pc_printer_media": ("パソコン用品・プリンタ・メディア", "https://www.kaunet.com/rakuraku/category/0/1/017/"),
+    "electronics_office": ("電化製品・電化消耗品・照明・事務機器", "https://www.kaunet.com/rakuraku/category/0/1/019/"),
+    "packing_store": ("梱包・物流・現場用品・店舗用品", "https://www.kaunet.com/rakuraku/category/0/1/023/"),
+    "medical_care_lab": ("衛生・医療・介護・研究用品", "https://www.kaunet.com/rakuraku/category/0/1/028/"),
+    "tools_parts": ("工具・計測用品・機械・電気電子部品", "https://www.kaunet.com/rakuraku/category/0/1/025/"),
+}
+
 SITE_CONFIGS = {
     "makeup": {
         "display_name": "MakeUp Solution",
@@ -72,6 +85,15 @@ SITE_CONFIGS = {
             {"value": "new_arrival", "label": "新着順"},
             {"value": "price_asc", "label": "価格が安い順"},
             {"value": "price_desc", "label": "価格が高い順"},
+        ],
+    },
+    "kaunet": {
+        "display_name": "カウネット",
+        "placeholder": "https://www.kaunet.com/...",
+        "default_categories": ["stationery"],
+        "categories": KAUNET_CATEGORIES,
+        "sort_options": [
+            {"value": "default", "label": "標準順"},
         ],
     },
 }

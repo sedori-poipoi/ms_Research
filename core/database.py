@@ -3,7 +3,7 @@ import os
 import sqlite3
 from urllib.parse import urlsplit, urlunsplit
 
-DEFAULT_DB_PATH = "data/history_research.db"
+DEFAULT_DB_PATH = os.getenv("RESEARCH_DB_PATH", "data/history_research.db")
 
 
 class ResearchDatabase:
