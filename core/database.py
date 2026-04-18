@@ -81,6 +81,22 @@ class ResearchDatabase:
         row = cursor.fetchone()
         return dict(row) if row else None
 
+    def _find_existing_result(self, cursor, res):
+        conditions, params = self._identity_conditions(res)
+        if not conditions:
+            return None
+
+        query = f"""
+            SELECT *
+            FROM results
+            WHERE {" OR ".join(conditions)}
+            ORDER BY created_at DESC
+            LIMIT 1
+        """
+        cursor.execute(query, params)
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
     def _delete_duplicate_matches(self, cursor, current_id, res):
         conditions, params = self._identity_conditions(res)
         if not conditions:
@@ -133,6 +149,21 @@ class ResearchDatabase:
                 ("filter_reason", "TEXT DEFAULT ''"),
                 ("restriction_code", "TEXT DEFAULT ''"),
                 ("approval_url", "TEXT DEFAULT ''"),
+                ("source_site", "TEXT DEFAULT ''"),
+                ("source_site_label", "TEXT DEFAULT ''"),
+                ("source_category", "TEXT DEFAULT ''"),
+                ("source_category_label", "TEXT DEFAULT ''"),
+                ("match_method", "TEXT DEFAULT ''"),
+                ("match_label", "TEXT DEFAULT ''"),
+                ("match_details", "TEXT DEFAULT ''"),
+                ("match_score", "INTEGER DEFAULT 0"),
+                ("watch_reason", "TEXT DEFAULT ''"),
+                ("previous_profit", "INTEGER DEFAULT 0"),
+                ("profit_delta", "INTEGER DEFAULT 0"),
+                ("previous_amazon_price", "INTEGER DEFAULT 0"),
+                ("amazon_price_delta", "INTEGER DEFAULT 0"),
+                ("previous_restriction", "TEXT DEFAULT ''"),
+                ("change_summary", "TEXT DEFAULT ''"),
             ]
             for col_name, col_type in migrations:
                 try:
@@ -153,22 +184,24 @@ class ResearchDatabase:
             cursor = conn.cursor()
 
             existing = self._find_existing_status(cursor, payload)
+            previous_row = self._find_existing_result(cursor, payload)
             payload["is_favorite"] = existing["is_favorite"] if existing else int(payload.get("is_favorite", 0))
             payload["is_checked"] = existing["is_checked"] if existing else int(payload.get("is_checked", 0))
 
-            cursor.execute("""
-                INSERT OR REPLACE INTO results (
-                    id, jan, asin, title, brand, price, amazon_price, 
-                    profit, margin, roi, rank, sellers, restriction, 
-                    judgment, amazon_url, keepa_url, ms_url, in_stock,
-                    is_favorite, is_checked, monthly_sales, drops_30,
-                    price_stability, filter_status, filter_reason,
-                    restriction_code, approval_url
-                ) VALUES (
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?
-                )
-            """, (
+            columns = [
+                "id", "jan", "asin", "title", "brand", "price", "amazon_price",
+                "profit", "margin", "roi", "rank", "sellers", "restriction",
+                "judgment", "amazon_url", "keepa_url", "ms_url", "in_stock",
+                "is_favorite", "is_checked", "monthly_sales", "drops_30",
+                "price_stability", "filter_status", "filter_reason",
+                "restriction_code", "approval_url", "source_site",
+                "source_site_label", "source_category", "source_category_label",
+                "match_method", "match_label", "match_details", "match_score",
+                "watch_reason", "previous_profit", "profit_delta",
+                "previous_amazon_price", "amazon_price_delta",
+                "previous_restriction", "change_summary",
+            ]
+            values = (
                 payload["id"], payload.get("jan", "—"), payload.get("asin", "—"),
                 payload.get("title", "不明"), payload.get("brand", "不明"),
                 payload.get("price", 0), payload.get("amazon_price", 0),
@@ -185,11 +218,41 @@ class ResearchDatabase:
                 payload.get("filter_status", "visible"),
                 payload.get("filter_reason", ""),
                 payload.get("restriction_code", ""),
-                payload.get("approval_url", "")
-            ))
+                payload.get("approval_url", ""),
+                payload.get("source_site", ""),
+                payload.get("source_site_label", ""),
+                payload.get("source_category", ""),
+                payload.get("source_category_label", ""),
+                payload.get("match_method", ""),
+                payload.get("match_label", ""),
+                payload.get("match_details", ""),
+                payload.get("match_score", 0),
+                payload.get("watch_reason", ""),
+                payload.get("previous_profit", 0),
+                payload.get("profit_delta", 0),
+                payload.get("previous_amazon_price", 0),
+                payload.get("amazon_price_delta", 0),
+                payload.get("previous_restriction", ""),
+                payload.get("change_summary", ""),
+            )
+            placeholders = ", ".join(["?"] * len(columns))
+            cursor.execute(
+                f"INSERT OR REPLACE INTO results ({', '.join(columns)}) VALUES ({placeholders})",
+                values,
+            )
             self._delete_duplicate_matches(cursor, payload["id"], payload)
             conn.commit()
+        payload["_previous_row"] = previous_row
         return payload
+
+    def find_matching_result(self, res):
+        payload = dict(res)
+        payload["ms_url"] = self.normalize_source_url(payload.get("ms_url", ""))
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            row = self._find_existing_result(cursor, payload)
+            return dict(row) if row else None
 
     def get_all_results(self, limit=200):
         """Fetch historical results."""

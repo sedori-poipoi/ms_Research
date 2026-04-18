@@ -571,10 +571,21 @@ class KaunetScraper:
             return None
 
     async def stop(self):
-        try:
-            if self.browser:
-                await self.browser.close()
-            if self.playwright:
-                await self.playwright.stop()
-        except Exception:
-            pass
+        for attr_name in ("page", "context", "browser"):
+            target = getattr(self, attr_name, None)
+            if not target:
+                continue
+            try:
+                await asyncio.wait_for(target.close(), timeout=5)
+            except Exception:
+                pass
+            finally:
+                setattr(self, attr_name, None)
+
+        if self.playwright:
+            try:
+                await asyncio.wait_for(self.playwright.stop(), timeout=5)
+            except Exception:
+                pass
+            finally:
+                self.playwright = None

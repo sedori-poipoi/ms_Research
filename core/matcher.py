@@ -121,12 +121,17 @@ class ProductMatcher:
         
         for cand in amazon_candidates:
             score = cls.get_match_score(
-                source_item['title'], 
-                cand['title'], 
+                source_item.get('title', ''), 
+                cand.get('title', ''), 
                 source_brand=source_item.get('brand', '不明')
             )
             
-            logger.info(f"Matching candidate: {cand['asin']} | Score: {score} | Title: {cand['title'][:40]}...")
+            logger.info(
+                "Matching candidate: %s | Score: %s | Title: %s...",
+                cand.get('asin', 'unknown'),
+                score,
+                cand.get('title', '')[:40],
+            )
             
             if score > max_score:
                 max_score = score

@@ -51,6 +51,13 @@ KAUNET_CATEGORIES = {
     "tools_parts": ("工具・計測用品・機械・電気電子部品", "https://www.kaunet.com/rakuraku/category/0/1/025/"),
 }
 
+SKATER_CATEGORIES = {
+    "lunchbox": ("お弁当箱・ランチグッズ", "https://www.skater-onlineshop.com/view/category/lunchbox"),
+    "bottle": ("水筒・タンブラー", "https://www.skater-onlineshop.com/view/category/bottle"),
+    "kitchen": ("キッチン用品・調理器具", "https://www.skater-onlineshop.com/view/category/kitchen"),
+    "life": ("生活雑貨・日用品", "https://www.skater-onlineshop.com/view/category/life"),
+}
+
 SITE_CONFIGS = {
     "makeup": {
         "display_name": "MakeUp Solution",
@@ -94,6 +101,15 @@ SITE_CONFIGS = {
         "categories": KAUNET_CATEGORIES,
         "sort_options": [
             {"value": "default", "label": "標準順"},
+        ],
+    },
+    "skater": {
+        "display_name": "スケーター公式",
+        "placeholder": "https://www.skater-onlineshop.com/...",
+        "default_categories": ["lunchbox"],
+        "categories": SKATER_CATEGORIES,
+        "sort_options": [
+            {"value": "default", "label": "おすすめ順"},
         ],
     },
 }

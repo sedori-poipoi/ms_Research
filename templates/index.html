@@ -40,90 +40,125 @@
                         </div>
                     </div>
 
-                    <!-- Row 2: Site + URL + Sort + Pages + Count + Toggles + Buttons -->
+                    <!-- Row 2: Input settings -->
                     <div class="control-row settings-row">
-                        <div class="form-group" style="min-width: 200px;">
-                            <label class="label-accent">巡回サイト</label>
-                            <select id="targetSite" onchange="updateCategories()">
-                                <option value="makeup">メイクアップソリューション</option>
-                                <option value="yodobashi">ヨドバシ.com</option>
-                                <option value="netsea">NETSEA (ネッシー)</option>
-                                <option value="kaunet">カウネット</option>
-                            </select>
-                        </div>
-                        <div class="form-group" style="flex: 1; min-width: 200px;">
-                            <label>カスタムURL (任意)</label>
-                            <input type="text" id="customUrl" placeholder="https://...">
-                        </div>
-                        <div class="form-group" style="width: 120px;">
-                            <label>並び順</label>
-                            <select id="sortOrder">
-                                <option value="disp_from_datetime">新着順</option>
-                                <option value="selling_price0_min">安い順</option>
-                                <option value="selling_price0_max">高い順</option>
-                            </select>
-                        </div>
-                        <div class="form-group" style="width: 70px;">
-                            <label>開始PG</label>
-                            <input type="number" id="startPage" value="1" min="1">
-                        </div>
-                        <div class="form-group" style="width: 70px;">
-                            <label>終了PG</label>
-                            <input type="number" id="endPage" value="1" min="1">
-                        </div>
-                        <div class="form-group" style="width: 90px;">
-                            <label>取得上限</label>
-                            <input type="number" id="maxItems" value="50" min="1" max="5000">
-                        </div>
-
-                        <div class="form-group">
-                            <label>設定</label>
-                            <div class="toggles-group">
-                                <label class="switch-compact" title="取得上限から必要ページ数を自動で計算します">
-                                    <span>自動PG</span>
-                                    <div class="switch">
-                                        <input type="checkbox" id="autoPageMode" checked onchange="updateResearchScopeControls()">
-                                        <span class="slider"></span>
-                                    </div>
-                                </label>
-                                <label class="switch-compact" title="カテゴリ内を最後まで低速巡回します">
-                                    <span>カテゴリ全件</span>
-                                    <div class="switch">
-                                        <input type="checkbox" id="fullCategoryMode" onchange="updateResearchScopeControls()">
-                                        <span class="slider"></span>
-                                    </div>
-                                </label>
-                                <label class="switch-compact">
-                                    <span>即戦力</span>
-                                    <div class="switch">
-                                        <input type="checkbox" id="focusMode">
-                                        <span class="slider"></span>
-                                    </div>
-                                </label>
-                                <label class="switch-compact">
-                                    <span>履歴Skip</span>
-                                    <div class="switch">
-                                        <input type="checkbox" id="skipHistory" checked>
-                                        <span class="slider"></span>
-                                    </div>
-                                </label>
-                                <label class="switch-compact" title="ブラウザを画面に表示して動きを確認します">
-                                    <span>見守る🔍</span>
-                                    <div class="switch">
-                                        <input type="checkbox" id="monitorMode">
-                                        <span class="slider"></span>
-                                    </div>
-                                </label>
+                        <div class="settings-grid settings-grid-top">
+                            <div class="form-group">
+                                <label class="label-accent">巡回サイト</label>
+                                <select id="targetSite" onchange="updateCategories()">
+                                    <option value="makeup">メイクアップソリューション</option>
+                                    <option value="yodobashi">ヨドバシ.com</option>
+                                    <option value="netsea">NETSEA (ネッシー)</option>
+                                    <option value="kaunet">カウネット</option>
+                                    <option value="skater">スケーター公式</option>
+                                </select>
+                                <div id="multiSiteSelector" class="multi-site-selector" style="display: none;">
+                                    <div class="multi-site-help">全サイトCSV照合では、同じKeepa CSVに複数サイトを順番に当てます。</div>
+                                    <div id="multiSiteOptions" class="multi-site-options"></div>
+                                </div>
+                            </div>
+                            <div class="form-group form-group-wide">
+                                <label>カスタムURL (任意)</label>
+                                <input type="text" id="customUrl" placeholder="https://...">
+                            </div>
+                            <div class="form-group">
+                                <label>並び順</label>
+                                <select id="sortOrder">
+                                    <option value="disp_from_datetime">新着順</option>
+                                    <option value="selling_price0_min">安い順</option>
+                                    <option value="selling_price0_max">高い順</option>
+                                </select>
                             </div>
                         </div>
+                    </div>
 
-                        <div style="flex: 1; display: flex; justify-content: flex-end; gap: 0.5rem; min-width: 150px;">
-                            <button id="stopBtn" class="btn-primary btn-stop" onclick="stopResearch()" style="display: none;">
-                                ■ 停止
-                            </button>
-                            <button id="startBtn" class="btn-primary" onclick="startResearch()" style="min-width: 150px;">
-                                ▶ リサーチ開始
-                            </button>
+                    <!-- Row 3: Match mode + CSV -->
+                    <div class="control-row settings-row">
+                        <div class="settings-grid settings-grid-match">
+                            <div class="form-group">
+                                <label>照合モード</label>
+                                <select id="matchMode" onchange="updateMatchModeUI()">
+                                    <option value="realtime">リアルタイム照合</option>
+                                    <option value="keepa_csv">Keepa CSV照合</option>
+                                    <option value="all_sites_csv">全サイトCSV照合</option>
+                                </select>
+                            </div>
+                            <div class="form-group keepa-upload-group">
+                                <label>Keepa CSV</label>
+                                <div class="keepa-upload-row">
+                                    <input type="file" id="keepaCsvFile" class="keepa-file-input" accept=".csv" onchange="updateKeepaCsvFileLabel()">
+                                    <label for="keepaCsvFile" class="keepa-file-button">ファイルを選択</label>
+                                    <span id="keepaCsvFilename" class="keepa-file-name">選択されていません</span>
+                                    <button type="button" class="btn-toggle" onclick="uploadKeepaCsv()" style="white-space: nowrap;">読込</button>
+                                </div>
+                                <div id="keepaCsvStatus" class="keepa-status-text">CSV未読込</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Row 4: Execution settings -->
+                    <div class="control-row settings-row settings-row-bottom">
+                        <div class="settings-grid settings-grid-bottom">
+                            <div class="form-group">
+                                <label>開始PG</label>
+                                <input type="number" id="startPage" value="1" min="1">
+                            </div>
+                            <div class="form-group">
+                                <label>終了PG</label>
+                                <input type="number" id="endPage" value="1" min="1">
+                            </div>
+                            <div class="form-group">
+                                <label>取得上限</label>
+                                <input type="number" id="maxItems" value="50" min="1" max="5000">
+                            </div>
+                            <div class="form-group settings-toggle-group">
+                                <label>設定</label>
+                                <div class="toggles-group">
+                                    <label class="switch-compact" title="取得上限から必要ページ数を自動で計算します">
+                                        <span>自動PG</span>
+                                        <div class="switch">
+                                            <input type="checkbox" id="autoPageMode" checked onchange="updateResearchScopeControls()">
+                                            <span class="slider"></span>
+                                        </div>
+                                    </label>
+                                    <label class="switch-compact" title="カテゴリ内を最後まで低速巡回します">
+                                        <span>カテゴリ全件</span>
+                                        <div class="switch">
+                                            <input type="checkbox" id="fullCategoryMode" onchange="updateResearchScopeControls()">
+                                            <span class="slider"></span>
+                                        </div>
+                                    </label>
+                                    <label class="switch-compact">
+                                        <span>即戦力</span>
+                                        <div class="switch">
+                                            <input type="checkbox" id="focusMode">
+                                            <span class="slider"></span>
+                                        </div>
+                                    </label>
+                                    <label class="switch-compact">
+                                        <span>履歴Skip</span>
+                                        <div class="switch">
+                                            <input type="checkbox" id="skipHistory" checked>
+                                            <span class="slider"></span>
+                                        </div>
+                                    </label>
+                                    <label class="switch-compact" title="ブラウザを画面に表示して動きを確認します">
+                                        <span>見守る🔍</span>
+                                        <div class="switch">
+                                            <input type="checkbox" id="monitorMode">
+                                            <span class="slider"></span>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="settings-actions">
+                                <button id="stopBtn" class="btn-primary btn-stop" onclick="stopResearch()" style="display: none;">
+                                    ■ 停止
+                                </button>
+                                <button id="startBtn" class="btn-primary" onclick="startResearch()">
+                                    ▶ リサーチ開始
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -177,52 +212,83 @@
                     </div>
                 </div>
 
+                <div class="dashboard-analysis-grid">
+                    <div class="card analysis-card">
+                        <div class="card-title" style="font-size: 0.95rem;">📊 今回のサマリー</div>
+                        <div id="runSummaryCards" class="summary-card-grid">
+                            <div class="summary-empty">リサーチ後に件数サマリーが表示されます。</div>
+                        </div>
+                        <div id="runSummaryHighlights" class="summary-highlights"></div>
+                    </div>
+                    <div class="card analysis-card">
+                        <div class="card-title" style="font-size: 0.95rem;">🧭 サイト別精度レポート</div>
+                        <div id="siteReportList" class="site-report-list">
+                            <div class="summary-empty">サイト別の一致率と利益率がここに並びます。</div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Results Table -->
                 <div class="card">
-                    <div class="results-header" style="display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 0.8rem;">
+                    <div class="results-header" style="display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 0.8rem;">
                         <div class="header-left">
                             <div class="card-title" style="margin-bottom: 0; font-size: 1rem; display: flex; align-items: center; gap: 0.8rem; flex-wrap: nowrap;">
                                 ✨ リサーチ結果
                                 <span id="resCount" class="count-badge">0件</span>
                                 <span id="filteredCount" style="font-size: 0.72rem; color: #999;"></span>
-                                <input type="text" id="tableSearch" placeholder="🔍 キーワード..." onkeyup="filterResults()" style="width: 320px;">
                             </div>
                         </div>
-                        <div class="header-filters" style="display: flex; flex-wrap: nowrap; align-items: center; justify-content: flex-end; gap: 0.5rem; min-width: 0; overflow-x: auto; overflow-y: hidden;">
-                            <label class="inline-check-label" style="display: inline-flex !important; align-items: center; gap: 0.4rem; white-space: nowrap; margin: 0 !important; padding: 0 !important;">
-                                <input type="checkbox" id="pinFavoritesToggle" checked onchange="filterResults()">
-                                <span>⭐ お気に入りを上に固定</span>
-                            </label>
-                            <select id="resultModeFilter" onchange="filterResults()" style="width: 138px;">
-                                <option value="all">全件</option>
-                                <option value="favorites">⭐ お気に入りだけ</option>
-                                <option value="checked">✅ チェック済みだけ</option>
-                            </select>
-                            <select id="sortMode" onchange="filterResults()" style="width: 138px;">
-                                <option value="newest">新しい順</option>
-                                <option value="profit_desc">利益が高い順</option>
-                                <option value="roi_desc">ROIが高い順</option>
-                                <option value="price_asc">仕入れが安い順</option>
-                            </select>
-                            <select id="profitFilter" onchange="filterResults()" style="width: 128px;">
-                                <option value="-999999" selected>全て表示</option>
-                                <option value="0">利益品のみ</option>
-                                <option value="500">500円以上</option>
-                                <option value="1000">1000円以上</option>
-                                <option value="2000">2000円以上</option>
-                            </select>
-                            <select id="restrictionFilter" onchange="filterResults()" style="width: 152px;">
-                                <option value="all">制限すべて</option>
-                                <option value="eligible">出品可能</option>
-                                <option value="approval">申請への入口</option>
-                                <option value="not_eligible">現在は解除不可</option>
-                            </select>
-                            <button id="toggleFilteredBtn" class="btn-filter-toggle" onclick="toggleFilteredItems()">
-                                🔼 除外商品も表示
-                            </button>
-                            <button id="resetBtn" class="btn-primary" onclick="clearResults()" style="background: var(--red-ng); padding: 0.4rem 0.8rem; font-size: 0.85rem;">
-                                🗑️ リセット
-                            </button>
+                        <div class="results-toolbar">
+                            <div class="results-toolbar-row results-toolbar-row-top">
+                                <input type="text" id="tableSearch" placeholder="🔍 キーワード..." onkeyup="filterResults()" class="results-search-input">
+                                <select id="resultModeFilter" onchange="filterResults()" style="width: 138px;">
+                                    <option value="all">全件</option>
+                                    <option value="favorites">⭐ お気に入りだけ</option>
+                                    <option value="checked">✅ チェック済みだけ</option>
+                                </select>
+                                <select id="sortMode" onchange="filterResults()" style="width: 138px;">
+                                    <option value="newest">新しい順</option>
+                                    <option value="profit_desc">利益が高い順</option>
+                                    <option value="roi_desc">ROIが高い順</option>
+                                    <option value="price_asc">仕入れが安い順</option>
+                                </select>
+                                <select id="profitFilter" onchange="filterResults()" style="width: 152px;">
+                                    <option value="all" selected>全て表示</option>
+                                    <option value="profit_100">利益品のみ</option>
+                                    <option value="watch_0_99">監視候補</option>
+                                    <option value="non_negative">赤字なし</option>
+                                    <option value="500">500円以上</option>
+                                    <option value="1000">1000円以上</option>
+                                    <option value="2000">2000円以上</option>
+                                </select>
+                                <select id="restrictionFilter" onchange="filterResults()" style="width: 152px;">
+                                    <option value="all">制限すべて</option>
+                                    <option value="eligible">出品可能</option>
+                                    <option value="approval">申請への入口</option>
+                                    <option value="not_eligible">現在は解除不可</option>
+                                </select>
+                                <select id="presetFilter" onchange="applyConditionPreset()" style="width: 168px;">
+                                    <option value="none">条件プリセット</option>
+                                </select>
+                            </div>
+                            <div class="results-toolbar-row results-toolbar-row-bottom">
+                                <label class="inline-check-label" style="display: inline-flex !important; align-items: center; gap: 0.4rem; white-space: nowrap; margin: 0 !important; padding: 0 !important;">
+                                    <input type="checkbox" id="pinFavoritesToggle" checked onchange="filterResults()">
+                                    <span>⭐ お気に入りを上に固定</span>
+                                </label>
+                                <button id="savePresetBtn" class="btn-filter-toggle" onclick="saveCurrentPreset()">
+                                    💾 条件を保存
+                                </button>
+                                <button id="bulkWatchFavoriteBtn" class="btn-filter-toggle" onclick="favoriteVisibleWatchItems()">
+                                    ⭐ 監視候補をまとめて保存
+                                </button>
+                                <button id="toggleFilteredBtn" class="btn-filter-toggle" onclick="toggleFilteredItems()">
+                                    🔼 除外商品も表示
+                                </button>
+                                <button id="resetBtn" class="btn-primary" onclick="clearResults()" style="background: var(--red-ng); padding: 0.4rem 0.8rem; font-size: 0.85rem;">
+                                    🗑️ リセット
+                                </button>
+                            </div>
                         </div>
                     </div>
                     <div id="resultsTableContainer" style="overflow-x: auto;">
